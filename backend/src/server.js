@@ -212,4 +212,4 @@ app.get('/*splat', (_req, res) => {
 });
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`CRM SaaS running on http://localhost:${port}`));
+app.listen(port, '0.0.0.0', () => console.log(`CRM SaaS running on port ${port}`));
