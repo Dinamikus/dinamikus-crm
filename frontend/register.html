@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Crear cuenta — Dinamikus CRM</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <div class="brand"><span>◆</span> Dinamikus CRM</div>
+      <p class="muted">Registra tu negocio y empieza a centralizar tus leads.</p>
+      <div id="error" class="auth-error"></div>
+      <form id="registerForm">
+        <label>Nombre del negocio
+          <input type="text" name="businessName" required placeholder="Clínica Dental Sonrisa">
+        </label>
+        <label>Tu nombre
+          <input type="text" name="adminName" required placeholder="María López">
+        </label>
+        <label>Correo
+          <input type="email" name="email" required autocomplete="email">
+        </label>
+        <label>Contraseña
+          <input type="password" name="password" required minlength="8" autocomplete="new-password">
+        </label>
+        <button class="primary" type="submit">Crear cuenta</button>
+      </form>
+      <div class="switch">¿Ya tienes cuenta? <a href="/login.html">Inicia sesión</a></div>
+    </div>
+  </div>
+  <script src="/auth.js"></script>
+  <script>
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errorBox = document.getElementById('error');
+      errorBox.classList.remove('visible');
+
+      const form = new FormData(e.target);
+      const body = {
+        businessName: form.get('businessName'),
+        adminName: form.get('adminName'),
+        email: form.get('email'),
+        password: form.get('password')
+      };
+
+      try {
+        const r = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const data = await r.json();
+
+        if (!r.ok) {
+          errorBox.textContent = data.error || 'No se pudo crear la cuenta';
+          errorBox.classList.add('visible');
+          return;
+        }
+
+        setSession(data.token, data.user, data.tenant);
+        window.location.href = '/';
+      } catch {
+        errorBox.textContent = 'Error de conexión. Intenta de nuevo.';
+        errorBox.classList.add('visible');
+      }
+    });
+  </script>
+</body>
+</html>

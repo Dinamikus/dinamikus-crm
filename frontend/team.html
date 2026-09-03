@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Equipo — Dinamikus CRM</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><span>◆</span> Dinamikus CRM</div>
+    <nav>
+      <a href="/">Dashboard</a>
+      <a href="/inbox.html">Inbox</a>
+      <a>Leads</a>
+      <a>Pipeline</a>
+      <a href="/automations.html">Automatizaciones</a>
+      <a href="/channels.html">Canales</a>
+      <a href="/reports.html">Reportes</a>
+      <a class="active" href="/team.html">Equipo</a>
+    </nav>
+    <div class="tenant">
+      <small>EMPRESA</small>
+      <strong id="tenantName">—</strong>
+      <span>Plan Starter</span>
+      <a href="#" id="logoutLink">Cerrar sesión</a>
+    </div>
+  </aside>
+
+  <main>
+    <header>
+      <div>
+        <p class="eyebrow">CRM SAAS</p>
+        <h1>Equipo</h1>
+        <p class="muted">Crea las credenciales de acceso de tus asesores y actívalos o desactívalos cuando cambie el personal.</p>
+      </div>
+    </header>
+
+    <section class="grid" style="grid-template-columns: 1fr; gap:20px; max-width:720px">
+      <div class="card" id="onlyAdminNotice" style="display:none">
+        <p class="muted">Solo un administrador puede crear o gestionar asesores. Pídele a tu admin que te dé acceso aquí.</p>
+      </div>
+
+      <div class="card" id="createCard">
+        <h3>Crear un nuevo asesor</h3>
+        <p class="muted">Genera una contraseña, cópiala, y entrégasela directamente al asesor.</p>
+        <form id="createForm" style="display:grid;gap:10px;margin-top:10px">
+          <input type="text" name="name" placeholder="Nombre completo" required style="padding:10px;border:1px solid #d0d5dd;border-radius:8px">
+          <input type="email" name="email" placeholder="Correo" required style="padding:10px;border:1px solid #d0d5dd;border-radius:8px">
+          <div style="display:flex;gap:8px">
+            <input type="text" name="password" id="newPassword" placeholder="Contraseña" required minlength="8" style="flex:1;padding:10px;border:1px solid #d0d5dd;border-radius:8px">
+            <button type="button" id="genPasswordBtn" style="padding:0 14px;border:1px solid #d0d5dd;border-radius:8px;background:white;cursor:pointer;font-size:12px">Generar</button>
+          </div>
+          <select name="role" style="padding:10px;border:1px solid #d0d5dd;border-radius:8px">
+            <option value="agent">Asesor</option>
+            <option value="admin">Administrador</option>
+          </select>
+          <button type="submit" class="primary" style="width:fit-content">Crear asesor</button>
+        </form>
+        <div id="createError" class="auth-error" style="margin-top:12px"></div>
+        <div id="createSuccess" class="auth-error" style="margin-top:12px;background:#ecfdf3;color:#027a48"></div>
+      </div>
+
+      <div class="card">
+        <h3>Equipo actual</h3>
+        <div id="teamList"><p class="muted">Cargando…</p></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/auth.js"></script>
+  <script src="/team.js"></script>
+</body>
+</html>

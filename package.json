@@ -1,0 +1,8 @@
+{
+  "name": "dinamikus-crm-saas-mvp",
+  "private": true,
+  "scripts": {
+    "postinstall": "npm install --prefix backend",
+    "start": "node backend/src/server.js"
+  }
+}

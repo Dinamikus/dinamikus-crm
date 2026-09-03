@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Reportes — Dinamikus CRM</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><span>◆</span> Dinamikus CRM</div>
+    <nav>
+      <a href="/">Dashboard</a>
+      <a href="/inbox.html">Inbox</a>
+      <a>Leads</a>
+      <a>Pipeline</a>
+      <a href="/automations.html">Automatizaciones</a>
+      <a href="/channels.html">Canales</a>
+      <a class="active" href="/reports.html">Reportes</a>
+      <a href="/team.html">Equipo</a>
+    </nav>
+    <div class="tenant">
+      <small>EMPRESA</small>
+      <strong id="tenantName">—</strong>
+      <span>Plan Starter</span>
+      <a href="#" id="logoutLink">Cerrar sesión</a>
+    </div>
+  </aside>
+
+  <main>
+    <header>
+      <div>
+        <p class="eyebrow">CRM SAAS</p>
+        <h1>Reportes</h1>
+        <p class="muted">Desempeño por asesor en el rango de fechas que elijas (por fecha en que llegó el lead).</p>
+      </div>
+    </header>
+
+    <div id="onlyAdminNotice" class="card" style="display:none">
+      <p class="muted">Solo un administrador puede ver los reportes del equipo.</p>
+    </div>
+
+    <div id="reportContent">
+      <div class="date-range">
+        <label>Desde <input type="date" id="fromDate"></label>
+        <label>Hasta <input type="date" id="toDate"></label>
+        <button id="loadReportBtn">Ver reporte</button>
+        <span id="reportStatus" class="muted" style="font-size:12px"></span>
+      </div>
+
+      <div class="card" style="overflow-x:auto">
+        <table class="report-table" id="reportTable">
+          <thead>
+            <tr>
+              <th>Asesor</th>
+              <th>Recibidos</th>
+              <th>En conversación</th>
+              <th>Sin respuesta</th>
+              <th>Recontacto</th>
+              <th>Citas</th>
+              <th>Cierres</th>
+              <th>No le interesa</th>
+            </tr>
+          </thead>
+          <tbody id="reportBody">
+            <tr><td colspan="8" class="muted">Elige un rango de fechas y dale "Ver reporte".</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted" style="font-size:12px;margin-top:10px">
+        "Recibidos" cuenta leads por fecha de llegada. "En conversación" / "Sin respuesta" es según si el lead ya tiene al menos una respuesta enviada. El resto de columnas refleja el estado <strong>actual</strong> del lead, no el que tenía en esa fecha.
+      </p>
+    </div>
+  </main>
+
+  <script src="/auth.js"></script>
+  <script src="/reports.js"></script>
+</body>
+</html>

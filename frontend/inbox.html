@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Inbox — Dinamikus CRM</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><span>◆</span> Dinamikus CRM</div>
+    <nav>
+      <a href="/">Dashboard</a>
+      <a class="active" href="/inbox.html">Inbox</a>
+      <a>Leads</a>
+      <a>Pipeline</a>
+      <a href="/automations.html">Automatizaciones</a>
+      <a href="/channels.html">Canales</a>
+      <a href="/reports.html">Reportes</a>
+      <a href="/team.html">Equipo</a>
+    </nav>
+    <div class="tenant">
+      <small>EMPRESA</small>
+      <strong id="tenantName">—</strong>
+      <span>Plan Starter</span>
+      <a href="#" id="logoutLink">Cerrar sesión</a>
+    </div>
+  </aside>
+
+  <main>
+    <header>
+      <div>
+        <p class="eyebrow">CRM SAAS</p>
+        <h1>Inbox</h1>
+        <p class="muted">Todas tus conversaciones de WhatsApp, Instagram y Messenger en un solo lugar.</p>
+      </div>
+      <label class="auto-assign-toggle">
+        <input type="checkbox" id="autoAssignToggle">
+        Repartir leads nuevos automáticamente
+      </label>
+    </header>
+
+    <section class="inbox">
+      <div class="convo-list" id="convoList">
+        <div class="convo-filters">
+          <select id="filterChannel"><option value="">Todos los canales</option></select>
+          <select id="filterAssignee">
+            <option value="">Todos los asesores</option>
+            <option value="__unassigned__">Sin asignar</option>
+          </select>
+        </div>
+        <div id="convoItems"><div class="empty-state">Cargando conversaciones…</div></div>
+      </div>
+
+      <div class="thread" id="thread">
+        <div class="empty-state" style="margin:auto">Selecciona una conversación para ver los mensajes.</div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/auth.js"></script>
+  <script src="/inbox.js"></script>
+</body>
+</html>

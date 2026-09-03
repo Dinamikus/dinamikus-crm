@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Canales — Dinamikus CRM</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><span>◆</span> Dinamikus CRM</div>
+    <nav>
+      <a href="/">Dashboard</a>
+      <a href="/inbox.html">Inbox</a>
+      <a>Leads</a>
+      <a>Pipeline</a>
+      <a href="/automations.html">Automatizaciones</a>
+      <a class="active" href="/channels.html">Canales</a>
+      <a href="/reports.html">Reportes</a>
+      <a href="/team.html">Equipo</a>
+    </nav>
+    <div class="tenant">
+      <small>EMPRESA</small>
+      <strong id="tenantName">—</strong>
+      <span>Plan Starter</span>
+      <a href="#" id="logoutLink">Cerrar sesión</a>
+    </div>
+  </aside>
+
+  <main>
+    <header>
+      <div>
+        <p class="eyebrow">CRM SAAS</p>
+        <h1>Canales</h1>
+        <p class="muted">Conecta el WhatsApp de tu negocio para empezar a recibir mensajes en el inbox.</p>
+      </div>
+    </header>
+
+    <section class="grid" style="grid-template-columns: 1fr; gap:20px; max-width:640px">
+      <div class="card" id="signupCard">
+        <h3>Conectar WhatsApp</h3>
+        <p class="muted" id="signupDescription">Cargando…</p>
+        <button id="connectBtn" class="primary" style="display:none">Conectar con Facebook</button>
+        <div id="signupError" class="auth-error" style="margin-top:14px"></div>
+      </div>
+
+      <div class="card">
+        <h3>Canales conectados</h3>
+        <div id="channelList"><p class="muted">Cargando…</p></div>
+      </div>
+
+      <div class="card" id="manualCard" style="display:none">
+        <h3>Registro manual (avanzado)</h3>
+        <p class="muted">Solo si aún no tienes el Embedded Signup configurado en tu app de Meta. Para Instagram necesitas pegar también un access token (sin él, el canal recibe mensajes pero no puede responder).</p>
+        <form id="manualForm" style="display:grid;gap:10px;margin-top:10px">
+          <select name="type" style="padding:10px;border:1px solid #d0d5dd;border-radius:8px">
+            <option value="whatsapp">WhatsApp</option>
+            <option value="instagram">Instagram</option>
+          </select>
+          <input type="text" name="externalId" placeholder="Phone Number ID (WhatsApp) o Instagram Account ID" required style="padding:10px;border:1px solid #d0d5dd;border-radius:8px">
+          <input type="text" name="displayName" placeholder="Nombre a mostrar (opcional)" style="padding:10px;border:1px solid #d0d5dd;border-radius:8px">
+          <input type="text" name="accessToken" placeholder="Access token (opcional para WhatsApp, recomendado para Instagram)" style="padding:10px;border:1px solid #d0d5dd;border-radius:8px">
+          <button type="submit" class="primary" style="width:fit-content">Registrar manualmente</button>
+        </form>
+        <div id="manualError" class="auth-error" style="margin-top:12px"></div>
+      </div>
+    </section>
+  </main>
+
+  <script async defer crossorigin="anonymous" src="https://connect.facebook.net/es_LA/sdk.js"></script>
+  <script src="/auth.js"></script>
+  <script src="/channels.js"></script>
+</body>
+</html>

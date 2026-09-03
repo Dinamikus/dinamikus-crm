@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Automatizaciones — Dinamikus CRM</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><span>◆</span> Dinamikus CRM</div>
+    <nav>
+      <a href="/">Dashboard</a>
+      <a href="/inbox.html">Inbox</a>
+      <a>Leads</a>
+      <a>Pipeline</a>
+      <a class="active" href="/automations.html">Automatizaciones</a>
+      <a href="/channels.html">Canales</a>
+      <a href="/reports.html">Reportes</a>
+      <a href="/team.html">Equipo</a>
+    </nav>
+    <div class="tenant">
+      <small>EMPRESA</small>
+      <strong id="tenantName">—</strong>
+      <span>Plan Starter</span>
+      <a href="#" id="logoutLink">Cerrar sesión</a>
+    </div>
+  </aside>
+
+  <main>
+    <header>
+      <div>
+        <p class="eyebrow">CRM SAAS</p>
+        <h1>Automatizaciones</h1>
+        <p class="muted">Reglas que corren solas, sin que un asesor tenga que estar ahí.</p>
+      </div>
+    </header>
+
+    <section class="grid" style="grid-template-columns: 1fr; gap:20px; max-width:640px">
+      <div class="card">
+        <h3>Mensaje de bienvenida automático</h3>
+        <p class="muted">
+          En cuanto un lead nuevo escribe por primera vez (WhatsApp o Instagram),
+          se le responde automáticamente con este mensaje — antes de que cualquier
+          asesor alcance a verlo. Solo se envía una vez, al primer mensaje del contacto.
+        </p>
+
+        <label class="auto-assign-toggle" style="margin-bottom:14px">
+          <input type="checkbox" id="welcomeEnabledToggle">
+          Activar mensaje de bienvenida automático
+        </label>
+
+        <textarea id="welcomeMessageText" rows="4" placeholder="Ej: Gracias por escribirnos. En breve un asesor te atiende."
+          style="width:100%;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-family:inherit;font-size:13px;resize:vertical"></textarea>
+
+        <div style="margin-top:12px;display:flex;align-items:center;gap:12px">
+          <button id="saveWelcomeBtn" class="primary">Guardar</button>
+          <span id="saveStatus" class="muted" style="font-size:12px"></span>
+        </div>
+        <div id="welcomeError" class="auth-error" style="margin-top:12px"></div>
+        <p id="readOnlyNotice" class="muted" style="display:none;margin-top:10px">
+          Solo un administrador puede cambiar esta configuración.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3>Próximamente</h3>
+        <p class="muted">Respuestas automáticas fuera de horario, por palabra clave, y seguimiento automático a leads sin respuesta.</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="/auth.js"></script>
+  <script src="/automations.js"></script>
+</body>
+</html>
