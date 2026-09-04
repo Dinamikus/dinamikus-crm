@@ -48,7 +48,8 @@ async function loadTeam() {
     list.innerHTML = team
       .map((u) => {
         const isSelf = currentUser && u.id === currentUser.id;
-        const roleLabel = u.role === 'admin' ? 'Administrador' : 'Asesor';
+       const ROLE_LABELS = { admin: 'Administrador', supervisor: 'Supervisor', agent: 'Asesor' };
+   const roleLabel = ROLE_LABELS[u.role] || u.role;
         const statusBadge = u.is_active
           ? '<span class="badge connected">Activo</span>'
           : '<span class="badge pending">Inactivo</span>';
