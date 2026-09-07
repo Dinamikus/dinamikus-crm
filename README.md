@@ -143,6 +143,22 @@ Se reemplazaron `interested`/`lost` por una taxonomía más cercana a como se tr
 - Los supervisores quedan **excluidos del reparto automático de leads** — no trabajan leads, no deben recibir ninguno (verificado: con reparto automático activo, los leads nuevos solo cayeron entre `admin` y `agent`, nunca en un `supervisor`).
 - De paso se cerró un hueco que existía desde antes: crear/eliminar **canales** no tenía ninguna restricción de rol — cualquier usuario autenticado podía conectar o quitar un número de WhatsApp/Instagram. Ya quedó restringido a `admin`.
 
+## WhatsApp por código QR (alternativa no oficial, por asesor)
+Cada asesor puede conectar su **propio número de WhatsApp** escaneando un código QR desde su celular (misma tecnología que WhatsApp Web/Desktop, vía la librería `baileys`), sin pasar por Meta ni por verificación de negocio.
+
+**⚠️ No es un método oficial** — usa una API no documentada de WhatsApp y viola sus Términos de Servicio. WhatsApp puede bloquear el número sin aviso si detecta patrones de uso automatizado. Recomendado solo para pruebas o para negocios pequeños que asumen ese riesgo conscientemente — no como canal principal de un negocio que ya factura por ese número.
+
+- **Backend**: `whatsappQr.js` (maneja la conexión/reconexión y el QR), `whatsappQrAuthState.js` (guarda la sesión de Baileys en Postgres — no en archivos, que se borran en cada redeploy de Railway), `whatsappQrRoutes.js` (endpoints).
+- **`POST /api/channels/whatsapp-qr/start`** — cualquier asesor (`agent` o `admin`, no `supervisor`) conecta su propio número. A diferencia de los demás canales, esto NO requiere ser admin — es autoservicio.
+- **`GET /api/channels/whatsapp-qr/:id/status`** — para hacer polling desde el frontend mientras se espera el escaneo (devuelve el QR como imagen base64).
+- **`DELETE /api/channels/whatsapp-qr/:id`** — el dueño del canal o un admin pueden desconectarlo.
+- **Sin duplicados**: reutiliza el mismo mecanismo de "lead nuevo vs. conversación ya en seguimiento" que WhatsApp Cloud API — un lead se crea una sola vez por número; si ya tiene una conversación abierta, el sistema la reutiliza y no repite el mensaje de bienvenida ni el reparto automático.
+- **Asignación directa por dueño**: un lead que llega por el WhatsApp QR de un asesor se le asigna automáticamente a ese mismo asesor — no pasa por el reparto general del equipo.
+- **Reconexión automática**: al arrancar el servidor (`reconnectAllOnBoot`), reconecta solas las sesiones que ya habían sido escaneadas, usando las credenciales guardadas en Postgres — un redeploy de Railway no desconecta a los asesores.
+- Frontend: tarjeta "Conectar mi WhatsApp personal" en `/channels.html`, visible para cualquier asesor (no solo admin).
+- **Versión de `baileys` usada**: `6.7.24` — deliberadamente NO la más reciente estable (6.17.16 tiene una vulnerabilidad de seguridad conocida que permite falsificar mensajes) ni la 7.x (todavía en release candidate y con una dependencia nativa en Rust que complica el build en Railway).
+- **Refactor de paso**: la lógica de "qué hacer cuando llega un mensaje" (antes duplicada en `whatsapp.js` e `instagram.js`) se centralizó en `inboundMessage.js`, usada ahora por los tres canales de mensajería.
+
 ## Base de datos — migraciones
 Si ya corriste `schema.sql` antes de estas fases, aplica en orden:
 ```
@@ -152,8 +168,9 @@ psql "$DATABASE_URL" -f sql/migrations/003_add_tenant_auto_assign.sql
 psql "$DATABASE_URL" -f sql/migrations/004_add_users_is_active.sql
 psql "$DATABASE_URL" -f sql/migrations/005_add_tenant_welcome_message.sql
 psql "$DATABASE_URL" -f sql/migrations/006_add_supervisor_role.sql
+psql "$DATABASE_URL" -f sql/migrations/007_add_whatsapp_qr.sql
 ```
-Bases de datos nuevas no necesitan esto — `schema.sql` ya incluye los seis cambios.
+Bases de datos nuevas no necesitan esto — `schema.sql` ya incluye los siete cambios.
 
 ## Próximas fases
 1. ~~Autenticación real y roles.~~ ✅
@@ -167,8 +184,9 @@ Bases de datos nuevas no necesitan esto — `schema.sql` ya incluye los seis cam
 9. ~~Automatización: mensaje de bienvenida a leads nuevos.~~ ✅
 10. ~~Reportes por asesor con rango de fechas.~~ ✅
 11. ~~Rol supervisor (ve todo, reasigna leads, sin acceso a configuración).~~ ✅
-12. Automatizaciones futuras: horario de atención, respuestas por palabra clave, seguimiento automático a leads sin respuesta.
-13. Historial de cambios de estado (para que los reportes reflejen el estado que tenía el lead en cada fecha, no solo el actual).
-14. Plantillas y seguimiento de WhatsApp.
+12. ~~WhatsApp por QR, por asesor (alternativa no oficial para pruebas).~~ ✅
+13. Automatizaciones futuras: horario de atención, respuestas por palabra clave, seguimiento automático a leads sin respuesta.
+14. Historial de cambios de estado (para que los reportes reflejen el estado que tenía el lead en cada fecha, no solo el actual).
+15. Plantillas y seguimiento de WhatsApp.
 8. Facturación SaaS.
 9. Auditoría, rate limits y observabilidad. ~~Encriptar `access_token_encrypted`.~~ ✅

@@ -23,13 +23,27 @@ CREATE INDEX IF NOT EXISTS idx_users_tenant ON users(tenant_id);
 CREATE TABLE IF NOT EXISTS channels (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  type TEXT NOT NULL CHECK (type IN ('whatsapp','instagram','messenger')),
+  type TEXT NOT NULL CHECK (type IN ('whatsapp','instagram','messenger','whatsapp_qr')),
   external_id TEXT,
   external_waba_id TEXT,
   display_name TEXT,
   access_token_encrypted TEXT,
   status TEXT NOT NULL DEFAULT 'pending',
+  -- Dueño del canal cuando es personal (un asesor conecta su propio WhatsApp por QR).
+  -- NULL para canales del negocio en general (WhatsApp Cloud API, Instagram).
+  owner_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_channels_owner ON channels(owner_user_id);
+
+-- Guarda las credenciales de sesión de Baileys (WhatsApp Web) por canal, para que
+-- sobreviva un redeploy sin tener que volver a escanear el QR. No usamos el sistema
+-- de archivos del contenedor (es efímero en Railway) — todo vive en Postgres.
+CREATE TABLE IF NOT EXISTS whatsapp_qr_sessions (
+  channel_id UUID PRIMARY KEY REFERENCES channels(id) ON DELETE CASCADE,
+  auth_state JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Un external_id (p. ej. phone_number_id de Meta) identifica un único canal en todo el sistema;

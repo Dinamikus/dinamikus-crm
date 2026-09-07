@@ -15,7 +15,7 @@ channelsRouter.use(requireAuth);
 channelsRouter.get('/', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id, type, external_id, external_waba_id, display_name, status, created_at
+      `SELECT id, type, external_id, external_waba_id, display_name, status, owner_user_id, created_at
        FROM channels WHERE tenant_id = $1 ORDER BY created_at DESC`,
       [req.user.tenantId]
     );

@@ -73,6 +73,118 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+// --- WhatsApp personal por QR (cualquier asesor, no solo admin) ---
+let myQrChannelId = null;
+let qrPollTimer = null;
+
+async function findMyQrChannel() {
+  try {
+    const r = await authFetch('/api/channels');
+    const channels = await r.json();
+    return channels.find((c) => c.type === 'whatsapp_qr' && c.owner_user_id === currentUser.id) || null;
+  } catch {
+    return null;
+  }
+}
+
+function showQrConnected(externalId) {
+  document.querySelector('#qrConnectedInfo').style.display = 'block';
+  document.querySelector('#qrConnectedNumber').textContent = externalId ? `+${externalId}` : '';
+  document.querySelector('#qrStartArea').style.display = 'none';
+  document.querySelector('#qrImageArea').style.display = 'none';
+  if (qrPollTimer) clearInterval(qrPollTimer);
+}
+
+function showQrPending() {
+  document.querySelector('#qrConnectedInfo').style.display = 'none';
+  document.querySelector('#qrStartArea').style.display = 'none';
+}
+
+function showQrStart() {
+  document.querySelector('#qrConnectedInfo').style.display = 'none';
+  document.querySelector('#qrStartArea').style.display = 'block';
+  document.querySelector('#qrImageArea').style.display = 'none';
+  if (qrPollTimer) clearInterval(qrPollTimer);
+}
+
+function pollQrStatus() {
+  if (qrPollTimer) clearInterval(qrPollTimer);
+  qrPollTimer = setInterval(async () => {
+    if (!myQrChannelId) return;
+    try {
+      const r = await authFetch(`/api/channels/whatsapp-qr/${myQrChannelId}/status`);
+      if (!r.ok) {
+        clearInterval(qrPollTimer);
+        return;
+      }
+      const data = await r.json();
+      if (data.status === 'connected') {
+        showQrConnected(data.externalId);
+      } else if (data.qrDataUrl) {
+        document.querySelector('#qrImage').src = data.qrDataUrl;
+        document.querySelector('#qrImageArea').style.display = 'block';
+        showQrPending();
+      }
+    } catch {
+      /* se reintenta en el próximo tick */
+    }
+  }, 2500);
+}
+
+async function initQrSection() {
+  const startBtn = document.querySelector('#qrStartBtn');
+  const disconnectBtn = document.querySelector('#qrDisconnectBtn');
+  const errorBox = document.querySelector('#qrError');
+
+  const existing = await findMyQrChannel();
+  if (existing) {
+    myQrChannelId = existing.id;
+    if (existing.status === 'connected') {
+      showQrConnected(existing.external_id);
+    } else {
+      showQrPending();
+      document.querySelector('#qrImageArea').style.display = 'block';
+      pollQrStatus();
+    }
+  }
+
+  startBtn.addEventListener('click', async () => {
+    errorBox.classList.remove('visible');
+    startBtn.disabled = true;
+    startBtn.textContent = 'Generando…';
+    try {
+      const r = await authFetch('/api/channels/whatsapp-qr/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ displayName: `WhatsApp de ${currentUser.name}` })
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        errorBox.textContent = data.error || 'No se pudo iniciar la conexión.';
+        errorBox.classList.add('visible');
+        return;
+      }
+      myQrChannelId = data.channelId;
+      showQrPending();
+      pollQrStatus();
+    } catch {
+      errorBox.textContent = 'Error de conexión al generar el QR.';
+      errorBox.classList.add('visible');
+    } finally {
+      startBtn.disabled = false;
+      startBtn.textContent = 'Generar código QR';
+    }
+  });
+
+  disconnectBtn.addEventListener('click', async () => {
+    if (!myQrChannelId) return;
+    if (!confirm('¿Desconectar tu WhatsApp? Dejarás de recibir sus mensajes en el CRM.')) return;
+    await authFetch(`/api/channels/whatsapp-qr/${myQrChannelId}`, { method: 'DELETE' });
+    myQrChannelId = null;
+    showQrStart();
+  });
+}
+
 async function submitEmbeddedSignup() {
   if (!pendingSession || !pendingSession.code || !pendingSession.wabaId || !pendingSession.phoneNumberId) {
     return;
@@ -108,6 +220,12 @@ async function init() {
   const btn = document.querySelector('#connectBtn');
   const manualCard = document.querySelector('#manualCard');
   const signupCard = document.querySelector('#signupCard');
+
+  if (currentUser && currentUser.role === 'supervisor') {
+    document.querySelector('#qrCard').style.display = 'none';
+  } else {
+    initQrSection();
+  }
 
   if (!isAdmin) {
     desc.textContent = 'Solo un administrador puede conectar o quitar canales.';

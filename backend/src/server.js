@@ -16,6 +16,9 @@ import { requireAuth } from './auth.js';
 import { processInboundWebhook } from './whatsapp.js';
 import { processInboundInstagramWebhook } from './instagram.js';
 import { decryptSecret } from './crypto.js';
+import { whatsappQrRouter } from './whatsappQrRoutes.js';
+import { sendQrMessage, reconnectAllOnBoot } from './whatsappQr.js';
+import { safeJsonStringify } from './jsonUtils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -41,6 +44,7 @@ app.use('/api/leads', leadsRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/tenant', tenantRouter);
 app.use('/api/reports', reportsRouter);
+app.use('/api/channels/whatsapp-qr', whatsappQrRouter);
 
 // Config pública (no-secreta) que el frontend necesita para iniciar el SDK de Facebook.
 app.get('/api/public-config', (_req, res) => {
@@ -167,6 +171,9 @@ app.post('/api/messages/send', requireAuth, async (req, res) => {
         body,
         channelToken
       );
+    } else if (lead.channel_type === 'whatsapp_qr') {
+      if (!lead.phone) return res.status(400).json({ error: 'Lead has no phone number on file' });
+      sendResult = await sendQrMessage(lead.channel_id, lead.phone, body);
     } else {
       return res.status(400).json({ error: `Unsupported channel type: ${lead.channel_type}` });
     }
@@ -191,13 +198,14 @@ app.post('/api/messages/send', requireAuth, async (req, res) => {
     const externalMessageId =
       (sendResult.messages && sendResult.messages[0] && sendResult.messages[0].id) ||
       sendResult.message_id ||
+      (sendResult.key && sendResult.key.id) ||
       null;
 
     await pool.query(
       `INSERT INTO messages
          (tenant_id, conversation_id, external_message_id, direction, message_type, body, raw_payload)
        VALUES ($1, $2, $3, 'outbound', 'text', $4, $5)`,
-      [req.user.tenantId, conversationId, externalMessageId, body, JSON.stringify(sendResult)]
+      [req.user.tenantId, conversationId, externalMessageId, body, safeJsonStringify(sendResult)]
     );
     await pool.query('UPDATE conversations SET updated_at = NOW() WHERE id = $1', [conversationId]);
 
@@ -213,3 +221,7 @@ app.get('/*splat', (_req, res) => {
 
 const port = process.env.PORT || 3000;
 app.listen(port, '0.0.0.0', () => console.log(`CRM SaaS running on port ${port}`));
+
+// Reconecta solas las sesiones de WhatsApp QR que ya habían sido escaneadas antes
+// de este arranque (redeploy, reinicio, etc.) — usa las credenciales guardadas en Postgres.
+reconnectAllOnBoot().catch((err) => console.error('Error reconectando sesiones WhatsApp QR:', err.message));

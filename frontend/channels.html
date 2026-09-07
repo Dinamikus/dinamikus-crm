@@ -37,6 +37,30 @@
     </header>
 
     <section class="grid" style="grid-template-columns: 1fr; gap:20px; max-width:640px">
+      <div class="card" id="qrCard">
+        <h3>Conectar mi WhatsApp personal (código QR)</h3>
+        <p class="muted">
+          Cada asesor conecta su propio número, igual que WhatsApp Web — escanea el código
+          con la cámara de WhatsApp en tu celular. Es una forma rápida de probar sin pasar
+          por la configuración de Meta, pero no es el método oficial: WhatsApp puede
+          bloquear el número si detecta uso automatizado. Úsalo para pruebas, no como tu
+          único canal si ya facturas con ese número.
+        </p>
+        <div id="qrConnectedInfo" style="display:none;margin-bottom:12px">
+          <span class="badge connected">Conectado</span>
+          <span id="qrConnectedNumber" style="margin-left:8px;font-weight:700"></span>
+          <button id="qrDisconnectBtn" class="remove-btn" style="margin-left:14px">Desconectar</button>
+        </div>
+        <div id="qrStartArea">
+          <button id="qrStartBtn" class="primary">Generar código QR</button>
+        </div>
+        <div id="qrImageArea" style="display:none;margin-top:16px;text-align:center">
+          <img id="qrImage" alt="Código QR de WhatsApp" style="max-width:260px;border:1px solid #e5e9f0;border-radius:12px">
+          <p class="muted" style="margin-top:8px">Abre WhatsApp en tu celular → Ajustes → Dispositivos vinculados → Vincular un dispositivo, y escanea este código.</p>
+        </div>
+        <div id="qrError" class="auth-error" style="margin-top:12px"></div>
+      </div>
+
       <div class="card" id="signupCard">
         <h3>Conectar WhatsApp</h3>
         <p class="muted" id="signupDescription">Cargando…</p>
