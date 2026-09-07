@@ -94,16 +94,15 @@ export async function startSession(channelId, tenantId, ownerUserId) {
       );
 
       if (!msg.message || remoteJid === 'status@broadcast') continue;
-      if (remoteJid.endsWith('@lid')) {
-        console.log(`[whatsapp_qr ${channelId}] jid tipo @lid (identificador de privacidad), no un telefono directo: ${remoteJid} — todavia no soportado`);
-        continue;
-      }
-      if (!remoteJid.endsWith('@s.whatsapp.net')) {
+
+      const isLid = remoteJid.endsWith('@lid');
+      const isPhoneJid = remoteJid.endsWith('@s.whatsapp.net');
+      if (!isLid && !isPhoneJid) {
         console.log(`[whatsapp_qr ${channelId}] jid ignorado (no es chat 1:1): ${remoteJid}`);
         continue;
       }
 
-      const phone = remoteJid.split('@')[0];
+      const contactId = remoteJid.split('@')[0];
       const body = extractText(msg.message);
       console.log(`[whatsapp_qr ${channelId}] texto extraido: ${JSON.stringify(body)}`);
       if (!body) continue; // adjuntos sin texto: se omiten en esta primera versión
@@ -118,7 +117,8 @@ export async function startSession(channelId, tenantId, ownerUserId) {
         await ingestOutboundMessageFromDevice({
           tenantId,
           channelId,
-          toId: phone,
+          identifyBy: isLid ? 'external_user_id' : 'phone',
+          toId: contactId,
           externalMessageId: msg.key.id,
           messageType: 'text',
           body,
@@ -132,8 +132,8 @@ export async function startSession(channelId, tenantId, ownerUserId) {
           channelExternalId,
           channelAccessTokenEncrypted: null,
           channelOwnerUserId: ownerUserId,
-          identifyBy: 'phone',
-          fromId: phone,
+          identifyBy: isLid ? 'external_user_id' : 'phone',
+          fromId: contactId,
           contactName: msg.pushName || null,
           externalMessageId: msg.key.id,
           messageType: 'text',
@@ -162,12 +162,13 @@ export async function stopSession(channelId, { logout }) {
   if (logout) await deletePostgresAuthState(channelId);
 }
 
-export async function sendQrMessage(channelId, toPhone, text) {
+export async function sendQrMessage(channelId, toId, text, jidType = 'phone') {
   const entry = sessions.get(channelId);
   if (!entry || !entry.sock || entry.status !== 'connected') {
     throw new Error('Este canal de WhatsApp (QR) no está conectado en este momento');
   }
-  const jid = `${toPhone}@s.whatsapp.net`;
+  const suffix = jidType === 'lid' ? '@lid' : '@s.whatsapp.net';
+  const jid = `${toId}${suffix}`;
   const result = await entry.sock.sendMessage(jid, { text });
   return result;
 }
@@ -196,4 +197,3 @@ function extractText(message) {
     null
   );
 }
-

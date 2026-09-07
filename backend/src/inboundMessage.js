@@ -135,6 +135,7 @@ export async function ingestInboundMessage({
 export async function ingestOutboundMessageFromDevice({
   tenantId,
   channelId,
+  identifyBy,
   toId,
   externalMessageId,
   messageType,
@@ -145,8 +146,9 @@ export async function ingestOutboundMessageFromDevice({
   try {
     await client.query('BEGIN');
 
+    const column = identifyBy === 'external_user_id' ? 'external_user_id' : 'phone';
     const lead = await client.query(
-      'SELECT id FROM leads WHERE tenant_id = $1 AND channel_id = $2 AND phone = $3',
+      `SELECT id FROM leads WHERE tenant_id = $1 AND channel_id = $2 AND ${column} = $3`,
       [tenantId, channelId, toId]
     );
     if (lead.rowCount === 0) {

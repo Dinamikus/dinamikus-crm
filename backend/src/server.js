@@ -172,8 +172,10 @@ app.post('/api/messages/send', requireAuth, async (req, res) => {
         channelToken
       );
     } else if (lead.channel_type === 'whatsapp_qr') {
-      if (!lead.phone) return res.status(400).json({ error: 'Lead has no phone number on file' });
-      sendResult = await sendQrMessage(lead.channel_id, lead.phone, body);
+      const jidType = lead.phone ? 'phone' : 'lid';
+      const toId = lead.phone || lead.external_user_id;
+      if (!toId) return res.status(400).json({ error: 'Lead has no WhatsApp identifier on file' });
+      sendResult = await sendQrMessage(lead.channel_id, toId, body, jidType);
     } else {
       return res.status(400).json({ error: `Unsupported channel type: ${lead.channel_type}` });
     }
