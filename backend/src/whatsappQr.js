@@ -53,6 +53,7 @@ export async function startSession(channelId, tenantId, ownerUserId) {
       entry.qrDataUrl = null;
       const jid = sock.user && sock.user.id;
       const phone = jid ? jid.split(':')[0].split('@')[0] : null;
+      console.log(`[whatsapp_qr ${channelId}] conectado correctamente, numero: ${phone}`);
       await pool.query(
         `UPDATE channels SET status = 'connected', external_id = COALESCE($1, external_id) WHERE id = $2`,
         [phone, channelId]
@@ -83,15 +84,28 @@ export async function startSession(channelId, tenantId, ownerUserId) {
   });
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    console.log(`[whatsapp_qr ${channelId}] messages.upsert type=${type} count=${messages.length}`);
     if (type !== 'notify') return;
 
     for (const msg of messages) {
-      if (!msg.message || msg.key.remoteJid === 'status@broadcast') continue;
-
       const remoteJid = msg.key.remoteJid || '';
-      if (!remoteJid.endsWith('@s.whatsapp.net')) continue; // ignora grupos por ahora
+      console.log(
+        `[whatsapp_qr ${channelId}] mensaje de ${remoteJid} fromMe=${msg.key.fromMe} tieneMensaje=${!!msg.message}`
+      );
+
+      if (!msg.message || remoteJid === 'status@broadcast') continue;
+      if (remoteJid.endsWith('@lid')) {
+        console.log(`[whatsapp_qr ${channelId}] jid tipo @lid (identificador de privacidad), no un telefono directo: ${remoteJid} — todavia no soportado`);
+        continue;
+      }
+      if (!remoteJid.endsWith('@s.whatsapp.net')) {
+        console.log(`[whatsapp_qr ${channelId}] jid ignorado (no es chat 1:1): ${remoteJid}`);
+        continue;
+      }
+
       const phone = remoteJid.split('@')[0];
       const body = extractText(msg.message);
+      console.log(`[whatsapp_qr ${channelId}] texto extraido: ${JSON.stringify(body)}`);
       if (!body) continue; // adjuntos sin texto: se omiten en esta primera versión
 
       const channelRow = await pool.query('SELECT external_id FROM channels WHERE id = $1', [
@@ -111,7 +125,7 @@ export async function startSession(channelId, tenantId, ownerUserId) {
           rawPayload: msg
         });
       } else {
-        await ingestInboundMessage({
+        const result = await ingestInboundMessage({
           tenantId,
           channelId,
           channelType: 'whatsapp_qr',
@@ -126,6 +140,7 @@ export async function startSession(channelId, tenantId, ownerUserId) {
           body,
           rawPayload: msg
         });
+        console.log(`[whatsapp_qr ${channelId}] ingestInboundMessage resultado:`, result);
       }
     }
   });
@@ -181,3 +196,4 @@ function extractText(message) {
     null
   );
 }
+
