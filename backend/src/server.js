@@ -12,6 +12,7 @@ import { leadsRouter } from './leadsRoutes.js';
 import { usersRouter } from './usersRoutes.js';
 import { tenantRouter } from './tenantRoutes.js';
 import { reportsRouter } from './reportsRoutes.js';
+import { teamsRouter } from './teamsRoutes.js';
 import { requireAuth } from './auth.js';
 import { processInboundWebhook } from './whatsapp.js';
 import { processInboundInstagramWebhook } from './instagram.js';
@@ -44,6 +45,7 @@ app.use('/api/leads', leadsRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/tenant', tenantRouter);
 app.use('/api/reports', reportsRouter);
+app.use('/api/teams', teamsRouter);
 app.use('/api/channels/whatsapp-qr', whatsappQrRouter);
 
 // Config pública (no-secreta) que el frontend necesita para iniciar el SDK de Facebook.

@@ -1,19 +1,23 @@
 import { Router } from 'express';
 import { pool } from './db.js';
 import { requireAuth } from './auth.js';
+import { getTeamAgentIds } from './teamScope.js';
 
 export const conversationsRouter = Router();
 conversationsRouter.use(requireAuth);
 
 // GET /api/conversations?status=open&channelId=...&assignedUserId=...&unassigned=true
 // Lista conversaciones del tenant con el lead, canal y último mensaje.
-// Un admin ve todo el tenant y puede usar los filtros libremente.
-// Un agent SOLO ve sus propias conversaciones asignadas — se ignora cualquier
-// assignedUserId/unassigned que mande, para que no pueda ver leads de otros
-// manipulando la URL.
+// - admin: ve todo el tenant, filtros libres.
+// - supervisor: ve SOLO los leads de los asesores de su(s) equipo(s), más los
+//   leads sin asignar (para poder repartirlos dentro de su equipo). Nunca ve
+//   leads de asesores de OTRO equipo/supervisor.
+// - agent: SOLO sus propias conversaciones asignadas — se ignora cualquier
+//   assignedUserId/unassigned que mande, para que no pueda ver leads de otros
+//   manipulando la URL.
 conversationsRouter.get('/', async (req, res) => {
   const { status, channelId, assignedUserId, unassigned } = req.query;
-  const isAgent = req.user.role === 'agent';
+  const { role } = req.user;
 
   try {
     const params = [req.user.tenantId];
@@ -28,9 +32,21 @@ conversationsRouter.get('/', async (req, res) => {
       filters.push(`c.channel_id = $${params.length}`);
     }
 
-    if (isAgent) {
+    if (role === 'agent') {
       params.push(req.user.id);
       filters.push(`l.assigned_user_id = $${params.length}`);
+    } else if (role === 'supervisor') {
+      const teamAgentIds = await getTeamAgentIds(req.user.tenantId, req.user.id);
+      params.push(teamAgentIds);
+      // Su equipo, o sin asignar todavía (para poder repartirlo dentro del equipo).
+      filters.push(`(l.assigned_user_id = ANY($${params.length}::uuid[]) OR l.assigned_user_id IS NULL)`);
+
+      if (unassigned === 'true') {
+        filters.push('l.assigned_user_id IS NULL');
+      } else if (assignedUserId && teamAgentIds.includes(assignedUserId)) {
+        params.push(assignedUserId);
+        filters.push(`l.assigned_user_id = $${params.length}`);
+      }
     } else if (unassigned === 'true') {
       filters.push('l.assigned_user_id IS NULL');
     } else if (assignedUserId) {
@@ -70,8 +86,8 @@ conversationsRouter.get('/', async (req, res) => {
 });
 
 // GET /api/conversations/:id/messages — hilo completo de una conversación.
-// Un agent recibe 404 (no 403) si la conversación no es suya, para no confirmar
-// que existe un lead ajeno con ese id.
+// Un agent o supervisor fuera de su alcance reciben 404 (no 403), para no
+// confirmar que existe un lead ajeno con ese id.
 conversationsRouter.get('/:id/messages', async (req, res) => {
   try {
     const convo = await pool.query(
@@ -83,9 +99,16 @@ conversationsRouter.get('/:id/messages', async (req, res) => {
     );
     if (convo.rowCount === 0) return res.status(404).json({ error: 'Conversation not found' });
 
-    const isAgent = req.user.role === 'agent';
-    if (isAgent && convo.rows[0].assigned_user_id !== req.user.id) {
+    const { role } = req.user;
+    const assignedTo = convo.rows[0].assigned_user_id;
+
+    if (role === 'agent' && assignedTo !== req.user.id) {
       return res.status(404).json({ error: 'Conversation not found' });
+    }
+    if (role === 'supervisor') {
+      const teamAgentIds = await getTeamAgentIds(req.user.tenantId, req.user.id);
+      const inScope = assignedTo === null || teamAgentIds.includes(assignedTo);
+      if (!inScope) return res.status(404).json({ error: 'Conversation not found' });
     }
 
     const messages = await pool.query(

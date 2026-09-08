@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Leads — Dinamikus CRM</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><span>◆</span> Dinamikus CRM</div>
+    <nav>
+      <a href="/">Dashboard</a>
+      <a href="/inbox.html">Inbox</a>
+      <a class="active" href="/leads.html">Leads</a>
+      <a href="/pipeline.html">Pipeline</a>
+      <a href="/automations.html">Automatizaciones</a>
+      <a href="/channels.html">Canales</a>
+      <a href="/reports.html">Reportes</a>
+      <a href="/team.html">Equipo</a>
+    </nav>
+    <div class="tenant">
+      <small>EMPRESA</small>
+      <strong id="tenantName">—</strong>
+      <span>Plan Starter</span>
+      <a href="#" id="logoutLink">Cerrar sesión</a>
+    </div>
+  </aside>
+
+  <main>
+    <header>
+      <div>
+        <p class="eyebrow">CRM SAAS</p>
+        <h1>Leads</h1>
+        <p class="muted">Todos los números que te han contactado, para dar seguimiento o exportar para campañas.</p>
+      </div>
+    </header>
+
+    <div class="card" id="importCard" style="display:none;margin-bottom:20px">
+      <h3>Importar números (Excel/CSV)</h3>
+      <p class="muted">
+        Sube un archivo (por ejemplo, exportado de un formulario de leads de Facebook) con una columna de teléfono.
+        Los números que ya existan en el sistema se omiten automáticamente — no se duplican ni se tocan leads con conversaciones activas.
+      </p>
+      <div style="display:grid;gap:10px;max-width:480px;margin-top:10px">
+        <input type="file" id="importFile" accept=".csv,.xlsx,.xls">
+        <div id="importPreview" class="muted" style="font-size:13px"></div>
+        <label style="font-size:13px;font-weight:700;color:#344054">Etiqueta de origen
+          <input type="text" id="importSource" value="Formulario Facebook" style="width:100%;margin-top:4px;padding:9px 10px;border:1px solid #d0d5dd;border-radius:8px;font-family:inherit">
+        </label>
+        <label style="font-size:13px;font-weight:700;color:#344054">Asignar a (opcional)
+          <select id="importAssignee" style="width:100%;margin-top:4px;padding:9px 10px;border:1px solid #d0d5dd;border-radius:8px;font-family:inherit">
+            <option value="">Sin asignar</option>
+          </select>
+        </label>
+        <button id="importBtn" class="primary" style="width:fit-content" disabled>Importar</button>
+      </div>
+      <div id="importResult" class="auth-error" style="margin-top:12px;background:#ecfdf3;color:#027a48"></div>
+      <div id="importError" class="auth-error" style="margin-top:12px"></div>
+    </div>
+
+    <div class="card" style="overflow-x:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+        <input type="text" id="searchBox" placeholder="Buscar por teléfono o nombre…" style="padding:9px 12px;border:1px solid #d0d5dd;border-radius:8px;font-family:inherit;font-size:13px;min-width:220px">
+        <button id="exportBtn" style="padding:9px 16px;border:1px solid #d0d5dd;border-radius:8px;background:white;cursor:pointer;font-size:13px;font-weight:700">Exportar CSV</button>
+      </div>
+      <table class="report-table" id="leadsTable">
+        <thead>
+          <tr>
+            <th>Teléfono</th>
+            <th>Nombre</th>
+            <th>Origen</th>
+            <th>Estado</th>
+            <th>Asignado a</th>
+            <th>Llegó</th>
+          </tr>
+        </thead>
+        <tbody id="leadsBody">
+          <tr><td colspan="6" class="muted">Cargando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="/auth.js"></script>
+  <script src="/leads.js"></script>
+</body>
+</html>

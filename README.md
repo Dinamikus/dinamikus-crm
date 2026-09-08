@@ -138,10 +138,19 @@ Se reemplazaron `interested`/`lost` por una taxonomía más cercana a como se tr
 
 ## Roles: admin, supervisor, agent
 - **admin**: acceso total — configuración del negocio, canales, equipo, reportes, y opera cualquier lead sin restricción.
-- **supervisor**: ve **todo** el inbox/leads del negocio (no está limitado a leads propios, porque no opera leads) y **puede reasignarlos** entre asesores — su única función es repartir/quitar trabajo, no ejecutarlo. No puede cambiar el estado ni las notas de un lead (403 si lo intenta), no puede enviar mensajes (403), y no puede tocar nada de configuración: ni equipo, ni canales, ni ajustes del tenant, ni automatizaciones (todo eso sigue siendo exclusivo de `admin`). Si puede ver reportes (`GET /api/reports/advisors`).
+- **supervisor**: ve los leads de los asesores de **su propio equipo** (más los que aún no tienen equipo/asesor asignado, para poder repartirlos) y **puede reasignarlos**, pero solo hacia asesores de su mismo equipo — nunca hacia o desde el equipo de otro supervisor. No puede cambiar el estado ni las notas de un lead (403 si lo intenta), no puede enviar mensajes (403), y no puede tocar nada de configuración: ni equipo, ni canales, ni ajustes del tenant, ni automatizaciones (todo eso sigue siendo exclusivo de `admin`). Ve reportes (`GET /api/reports/advisors`), pero solo de los asesores de su equipo.
 - **agent**: solo ve y opera (estado/notas/respuestas) sus propios leads asignados; nunca puede reasignar, ni ver reportes de equipo, ni tocar configuración.
 - Los supervisores quedan **excluidos del reparto automático de leads** — no trabajan leads, no deben recibir ninguno (verificado: con reparto automático activo, los leads nuevos solo cayeron entre `admin` y `agent`, nunca en un `supervisor`).
 - De paso se cerró un hueco que existía desde antes: crear/eliminar **canales** no tenía ninguna restricción de rol — cualquier usuario autenticado podía conectar o quitar un número de WhatsApp/Instagram. Ya quedó restringido a `admin`.
+
+## Equipos (aislamiento entre supervisores)
+Un negocio puede tener varios supervisores, cada uno responsable de un grupo distinto de asesores — sin que uno vea o toque los leads del equipo del otro.
+- `teams`: cada fila es un equipo (`name`, `supervisor_id`). `users.team_id` liga a un asesor (o supervisor, aunque normalmente no aplica) a un equipo.
+- **`GET/POST/PATCH/DELETE /api/teams`** — crear/gestionar equipos y asignar su supervisor (solo `admin`; `GET` es visible para cualquiera, es solo el directorio de equipos).
+- Al crear o editar un usuario (`POST`/`PATCH /api/users/:id`), el admin puede asignarlo a un equipo con `teamId`.
+- **Alcance de un supervisor** (`backend/src/teamScope.js`, función `getTeamAgentIds`): se aplica en `GET /api/conversations`, `GET /api/conversations/:id/messages`, `GET /api/leads`, `PATCH /api/leads/:id`, `GET /api/reports/advisors`, y `GET /api/users?scope=team` (usado por el selector de "asignar a" del inbox, para que un supervisor no vea ni por error a asesores de otro equipo en su propio desplegable).
+- Un supervisor sin equipo asignado todavía no ve ningún lead — por diseño (falla cerrado, no abierto).
+- Frontend: la tarjeta "Equipos" en `/team.html` (solo admin) para crear equipos y asignar supervisor; cada fila de asesor en la lista tiene un selector para moverlo de equipo.
 
 ## WhatsApp por código QR (alternativa no oficial, por asesor)
 Cada asesor puede conectar su **propio número de WhatsApp** escaneando un código QR desde su celular (misma tecnología que WhatsApp Web/Desktop, vía la librería `baileys`), sin pasar por Meta ni por verificación de negocio.
@@ -169,8 +178,22 @@ psql "$DATABASE_URL" -f sql/migrations/004_add_users_is_active.sql
 psql "$DATABASE_URL" -f sql/migrations/005_add_tenant_welcome_message.sql
 psql "$DATABASE_URL" -f sql/migrations/006_add_supervisor_role.sql
 psql "$DATABASE_URL" -f sql/migrations/007_add_whatsapp_qr.sql
+psql "$DATABASE_URL" -f sql/migrations/008_add_teams.sql
 ```
-Bases de datos nuevas no necesitan esto — `schema.sql` ya incluye los siete cambios.
+Bases de datos nuevas no necesitan esto — `schema.sql` ya incluye los ocho cambios.
+
+## Leads (vista, exportar CSV, importar Excel/CSV)
+- Frontend `/leads.html` — tabla con todos los leads del tenant (teléfono primero, ya que es el dato que más le importa al negocio; nombre es secundario/opcional), con buscador simple por teléfono o nombre. Respeta las mismas reglas de visibilidad por rol que el resto del sistema (`GET /api/leads` ya filtra por rol y por equipo).
+- **Exportar CSV**: botón que genera un `.csv` en el navegador (sin pasar por el backend) con los leads visibles/filtrados — pensado para sacar la lista de teléfonos y usarla en campañas de recontacto fuera del CRM.
+- **Importar** (solo admin): sube un archivo `.xlsx`, `.xls` o `.csv` (ej. exportado de un formulario de Facebook Ads), se parsea en el navegador con SheetJS, detecta automáticamente la columna de teléfono (busca encabezados como "teléfono", "phone", "número", "whatsapp") y opcionalmente una de nombre.
+  - `POST /api/leads/import` — normaliza cada número (quita espacios, guiones, paréntesis, `+`), y hace upsert por `(tenant_id, phone)`: los que ya existen se **omiten silenciosamente**, nunca se pisa el nombre ni los datos de un lead que ya tiene una conversación real en curso.
+  - Se puede asignar toda la tanda importada a un asesor específico de una vez, o dejarla sin asignar.
+  - Límite de 5000 registros por importación.
+  - Devuelve un resumen: cuántos se importaron, cuántos ya existían, cuántos no eran números válidos.
+
+## Pipeline (tablero kanban)
+- Frontend `/pipeline.html` — una columna por estado del lead (Nuevo, En conversación, Recontacto, Cita, Cierre, No le interesa). Arrastra una tarjeta a otra columna para cambiar el estado del lead — usa el mismo `PATCH /api/leads/:id` de siempre, así que respeta las mismas reglas de permisos por rol ya existentes: un `agent` solo puede mover sus propios leads, un `supervisor` no puede mover ninguno (solo reasignar, no cambiar estado), un `admin` puede mover cualquiera.
+- No hay endpoints nuevos — reutiliza `GET /api/leads` (ya filtra por rol) para pintar el tablero.
 
 ## Próximas fases
 1. ~~Autenticación real y roles.~~ ✅
@@ -185,8 +208,11 @@ Bases de datos nuevas no necesitan esto — `schema.sql` ya incluye los siete ca
 10. ~~Reportes por asesor con rango de fechas.~~ ✅
 11. ~~Rol supervisor (ve todo, reasigna leads, sin acceso a configuración).~~ ✅
 12. ~~WhatsApp por QR, por asesor (alternativa no oficial para pruebas).~~ ✅
-13. Automatizaciones futuras: horario de atención, respuestas por palabra clave, seguimiento automático a leads sin respuesta.
-14. Historial de cambios de estado (para que los reportes reflejen el estado que tenía el lead en cada fecha, no solo el actual).
-15. Plantillas y seguimiento de WhatsApp.
-8. Facturación SaaS.
-9. Auditoría, rate limits y observabilidad. ~~Encriptar `access_token_encrypted`.~~ ✅
+13. ~~Vista de Leads con exportar CSV e importar Excel/CSV.~~ ✅
+14. ~~Pipeline (tablero kanban de leads por estado).~~ ✅
+15. ~~Equipos: aislar a cada supervisor a solo los asesores de su propio equipo.~~ ✅
+16. Automatizaciones futuras: horario de atención, respuestas por palabra clave, seguimiento automático a leads sin respuesta.
+17. Historial de cambios de estado (para que los reportes reflejen el estado que tenía el lead en cada fecha, no solo el actual).
+18. Plantillas y seguimiento de WhatsApp.
+19. Facturación SaaS.
+20. Auditoría, rate limits y observabilidad.

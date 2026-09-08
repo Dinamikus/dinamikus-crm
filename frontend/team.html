@@ -12,8 +12,8 @@
     <nav>
       <a href="/">Dashboard</a>
       <a href="/inbox.html">Inbox</a>
-      <a>Leads</a>
-      <a>Pipeline</a>
+      <a href="/leads.html">Leads</a>
+      <a href="/pipeline.html">Pipeline</a>
       <a href="/automations.html">Automatizaciones</a>
       <a href="/channels.html">Canales</a>
       <a href="/reports.html">Reportes</a>
@@ -56,10 +56,27 @@
    <option value="supervisor">Supervisor</option>
    <option value="admin">Administrador</option>
           </select>
+          <select name="teamId" id="createTeamSelect" style="padding:10px;border:1px solid #d0d5dd;border-radius:8px">
+            <option value="">Sin equipo</option>
+          </select>
           <button type="submit" class="primary" style="width:fit-content">Crear asesor</button>
         </form>
         <div id="createError" class="auth-error" style="margin-top:12px"></div>
         <div id="createSuccess" class="auth-error" style="margin-top:12px;background:#ecfdf3;color:#027a48"></div>
+      </div>
+
+      <div class="card" id="teamsCard" style="display:none">
+        <h3>Equipos</h3>
+        <p class="muted">Cada equipo tiene un supervisor, que solo ve y reparte los leads de los asesores de su propio equipo — nunca los de otro.</p>
+        <div id="teamsList" style="margin-bottom:14px"></div>
+        <form id="createTeamForm" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+          <input type="text" name="name" placeholder="Nombre del equipo (ej. Equipo A)" required style="flex:1;min-width:180px;padding:10px;border:1px solid #d0d5dd;border-radius:8px">
+          <select name="supervisorId" id="newTeamSupervisor" style="padding:10px;border:1px solid #d0d5dd;border-radius:8px">
+            <option value="">Sin supervisor todavía</option>
+          </select>
+          <button type="submit" class="primary">Crear equipo</button>
+        </form>
+        <div id="teamError" class="auth-error" style="margin-top:12px"></div>
       </div>
 
       <div class="card">

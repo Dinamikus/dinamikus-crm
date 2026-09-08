@@ -13,7 +13,11 @@ const isAdmin = currentUser && currentUser.role === 'admin';
 if (!isAdmin) {
   document.querySelector('#onlyAdminNotice').style.display = 'block';
   document.querySelector('#createCard').style.display = 'none';
+} else {
+  document.querySelector('#teamsCard').style.display = 'block';
 }
+
+let teamsCache = [];
 
 function escapeHtml(str) {
   const div = document.createElement('div');
@@ -34,11 +38,50 @@ document.querySelector('#genPasswordBtn').addEventListener('click', () => {
   document.querySelector('#newPassword').value = generatePassword();
 });
 
+async function loadTeams() {
+  if (!isAdmin) return;
+  try {
+    const r = await authFetch('/api/teams');
+    teamsCache = await r.json();
+
+    const teamsList = document.querySelector('#teamsList');
+    teamsList.innerHTML = teamsCache.length
+      ? teamsCache
+          .map(
+            (t) => `
+            <div class="channel-row">
+              <div class="meta">
+                <strong>${escapeHtml(t.name)}</strong>
+                <span>${t.supervisor_name ? 'Supervisor: ' + escapeHtml(t.supervisor_name) : 'Sin supervisor'} · ${t.member_count} asesor(es)</span>
+              </div>
+            </div>`
+          )
+          .join('')
+      : '<p class="muted" style="font-size:13px">Aún no hay equipos.</p>';
+
+    // Poblar el selector de equipo del formulario de crear asesor
+    const createTeamSelect = document.querySelector('#createTeamSelect');
+    createTeamSelect.innerHTML =
+      '<option value="">Sin equipo</option>' +
+      teamsCache.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
+  } catch {
+    document.querySelector('#teamsList').innerHTML = '<p class="muted">No se pudieron cargar los equipos.</p>';
+  }
+}
+
 async function loadTeam() {
   const list = document.querySelector('#teamList');
   try {
     const r = await authFetch('/api/users');
     const team = await r.json();
+
+    if (isAdmin) {
+      const supervisorSelect = document.querySelector('#newTeamSupervisor');
+      const supervisors = team.filter((u) => u.role === 'supervisor');
+      supervisorSelect.innerHTML =
+        '<option value="">Sin supervisor todavía</option>' +
+        supervisors.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+    }
 
     if (team.length === 0) {
       list.innerHTML = '<p class="muted">Aún no hay asesores.</p>';
@@ -48,8 +91,8 @@ async function loadTeam() {
     list.innerHTML = team
       .map((u) => {
         const isSelf = currentUser && u.id === currentUser.id;
-       const ROLE_LABELS = { admin: 'Administrador', supervisor: 'Supervisor', agent: 'Asesor' };
-   const roleLabel = ROLE_LABELS[u.role] || u.role;
+        const ROLE_LABELS = { admin: 'Administrador', supervisor: 'Supervisor', agent: 'Asesor' };
+        const roleLabel = ROLE_LABELS[u.role] || u.role;
         const statusBadge = u.is_active
           ? '<span class="badge connected">Activo</span>'
           : '<span class="badge pending">Inactivo</span>';
@@ -59,6 +102,12 @@ async function loadTeam() {
         const resetBtn = isAdmin
           ? `<button class="remove-btn reset-btn" data-id="${u.id}" data-name="${escapeHtml(u.name)}" style="color:#2563eb">Resetear contraseña</button>`
           : '';
+        const teamCell = isAdmin
+          ? `<select class="team-select" data-id="${u.id}" style="padding:5px 8px;border:1px solid #d0d5dd;border-radius:6px;font-size:12px;font-family:inherit">
+               <option value="">Sin equipo</option>
+               ${teamsCache.map((t) => `<option value="${t.id}" ${u.team_id === t.id ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}
+             </select>`
+          : `<span>${escapeHtml(u.team_name || 'Sin equipo')}</span>`;
         return `
           <div class="channel-row">
             <div class="meta">
@@ -66,6 +115,7 @@ async function loadTeam() {
               <span>${escapeHtml(u.email)} · ${roleLabel}</span>
             </div>
             <div style="display:flex;align-items:center;gap:12px">
+              ${teamCell}
               ${statusBadge}
               ${resetBtn}
               ${toggleBtn}
@@ -109,6 +159,17 @@ async function loadTeam() {
         }
       });
     });
+
+    list.querySelectorAll('.team-select').forEach((select) => {
+      select.addEventListener('change', async () => {
+        await authFetch(`/api/users/${select.dataset.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ teamId: select.value || null })
+        });
+        loadTeams();
+      });
+    });
   } catch {
     list.innerHTML = '<p class="muted">No se pudo cargar el equipo.</p>';
   }
@@ -127,7 +188,8 @@ if (isAdmin) {
       name: form.get('name'),
       email: form.get('email'),
       password: form.get('password'),
-      role: form.get('role')
+      role: form.get('role'),
+      teamId: form.get('teamId') || undefined
     };
 
     try {
@@ -151,6 +213,40 @@ if (isAdmin) {
       errorBox.classList.add('visible');
     }
   });
+
+  document.querySelector('#createTeamForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errorBox = document.querySelector('#teamError');
+    errorBox.classList.remove('visible');
+
+    const form = new FormData(e.target);
+    try {
+      const r = await authFetch('/api/teams', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: form.get('name'),
+          supervisorId: form.get('supervisorId') || undefined
+        })
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        errorBox.textContent = data.error || 'No se pudo crear el equipo.';
+        errorBox.classList.add('visible');
+        return;
+      }
+      e.target.reset();
+      await loadTeams();
+      loadTeam();
+    } catch {
+      errorBox.textContent = 'Error de conexión al crear el equipo.';
+      errorBox.classList.add('visible');
+    }
+  });
 }
 
-loadTeam();
+async function init() {
+  await loadTeams();
+  await loadTeam();
+}
+init();

@@ -56,7 +56,7 @@ async function loadFilterOptions() {
   try {
     const [channelsRes, usersRes] = await Promise.all([
       authFetch('/api/channels'),
-      authFetch('/api/users?active=true')
+      authFetch(isSupervisor ? '/api/users?active=true&scope=team' : '/api/users?active=true')
     ]);
     channels = await channelsRes.json();
     users = await usersRes.json();

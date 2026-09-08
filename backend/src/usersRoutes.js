@@ -1,25 +1,39 @@
 import { Router } from 'express';
 import { pool } from './db.js';
 import { requireAuth, requireRole, hashPassword } from './auth.js';
+import { getTeamAgentIds } from './teamScope.js';
 
 export const usersRouter = Router();
 usersRouter.use(requireAuth);
 
-// GET /api/users?active=true — asesores del tenant. Por defecto trae todos
-// (activos e inactivos) para la pantalla de gestión de equipo; ?active=true
-// filtra solo los activos (para poblar selectores de asignación).
+// GET /api/users?active=true&scope=team — asesores del tenant. Por defecto trae
+// todos (activos e inactivos) para la pantalla de gestión de equipo; ?active=true
+// filtra solo los activos (para poblar selectores de asignación). ?scope=team,
+// cuando lo pide un supervisor, limita la lista a los asesores de SU equipo
+// (para que su selector de "asignar a" no ofrezca gente de otro equipo).
 usersRouter.get('/', async (req, res) => {
-  const { active } = req.query;
+  const { active, scope } = req.query;
   const params = [req.user.tenantId];
-  let filter = '';
-  if (active === 'true') {
-    filter = 'AND is_active = true';
+  const filters = [];
+
+  if (active === 'true') filters.push('u.is_active = true');
+
+  if (scope === 'team' && req.user.role === 'supervisor') {
+    const teamAgentIds = await getTeamAgentIds(req.user.tenantId, req.user.id);
+    if (teamAgentIds.length === 0) {
+      return res.json([]); // supervisor sin equipo asignado todavía
+    }
+    params.push(teamAgentIds);
+    filters.push(`u.id = ANY($${params.length}::uuid[])`);
   }
+
+  const filter = filters.length ? `AND ${filters.join(' AND ')}` : '';
 
   try {
     const result = await pool.query(
-      `SELECT id, name, email, role, is_active, created_at
-       FROM users WHERE tenant_id = $1 ${filter} ORDER BY is_active DESC, name ASC`,
+      `SELECT u.id, u.name, u.email, u.role, u.is_active, u.team_id, t.name AS team_name, u.created_at
+       FROM users u LEFT JOIN teams t ON t.id = u.team_id
+       WHERE u.tenant_id = $1 ${filter} ORDER BY u.is_active DESC, u.name ASC`,
       params
     );
     res.json(result.rows);
@@ -31,7 +45,7 @@ usersRouter.get('/', async (req, res) => {
 // POST /api/users — solo un admin puede crear credenciales para un asesor nuevo.
 // El admin define la contraseña aquí mismo para entregársela directamente al asesor.
 usersRouter.post('/', requireRole('admin'), async (req, res) => {
-  const { name, email, password, role } = req.body || {};
+  const { name, email, password, role, teamId } = req.body || {};
 
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'name, email and password are required' });
@@ -51,12 +65,20 @@ usersRouter.post('/', requireRole('admin'), async (req, res) => {
       return res.status(409).json({ error: 'Email is already registered' });
     }
 
+    if (teamId) {
+      const team = await pool.query('SELECT id FROM teams WHERE id = $1 AND tenant_id = $2', [
+        teamId,
+        req.user.tenantId
+      ]);
+      if (team.rowCount === 0) return res.status(400).json({ error: 'teamId no pertenece a este negocio' });
+    }
+
     const passwordHash = await hashPassword(password);
     const result = await pool.query(
-      `INSERT INTO users (tenant_id, name, email, password_hash, role, is_active)
-       VALUES ($1, $2, $3, $4, $5, true)
-       RETURNING id, name, email, role, is_active, created_at`,
-      [req.user.tenantId, name, email.toLowerCase(), passwordHash, role || 'agent']
+      `INSERT INTO users (tenant_id, name, email, password_hash, role, is_active, team_id)
+       VALUES ($1, $2, $3, $4, $5, true, $6)
+       RETURNING id, name, email, role, is_active, team_id, created_at`,
+      [req.user.tenantId, name, email.toLowerCase(), passwordHash, role || 'agent', teamId || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -64,11 +86,11 @@ usersRouter.post('/', requireRole('admin'), async (req, res) => {
   }
 });
 
-// PATCH /api/users/:id — solo un admin: activar/desactivar, cambiar rol, o
-// resetear la contraseña (por rotación de personal: reutilizar el acceso
-// para el reemplazo, o simplemente desactivar a quien se fue).
+// PATCH /api/users/:id — solo un admin: activar/desactivar, cambiar rol, mover
+// de equipo, o resetear la contraseña (por rotación de personal).
 usersRouter.patch('/:id', requireRole('admin'), async (req, res) => {
-  const { isActive, role, name, password } = req.body || {};
+  const { isActive, role, name, password, teamId } = req.body || {};
+  const touchesTeam = Object.prototype.hasOwnProperty.call(req.body || {}, 'teamId');
 
   if (req.params.id === req.user.id && isActive === false) {
     return res.status(400).json({ error: 'No puedes desactivar tu propia cuenta' });
@@ -81,6 +103,14 @@ usersRouter.patch('/:id', requireRole('admin'), async (req, res) => {
   }
 
   try {
+    if (touchesTeam && teamId) {
+      const team = await pool.query('SELECT id FROM teams WHERE id = $1 AND tenant_id = $2', [
+        teamId,
+        req.user.tenantId
+      ]);
+      if (team.rowCount === 0) return res.status(400).json({ error: 'teamId no pertenece a este negocio' });
+    }
+
     const setClauses = [];
     const params = [];
 
@@ -100,6 +130,10 @@ usersRouter.patch('/:id', requireRole('admin'), async (req, res) => {
       params.push(await hashPassword(password));
       setClauses.push(`password_hash = $${params.length}`);
     }
+    if (touchesTeam) {
+      params.push(teamId || null);
+      setClauses.push(`team_id = $${params.length}`);
+    }
 
     if (setClauses.length === 0) {
       return res.status(400).json({ error: 'Nothing to update' });
@@ -109,7 +143,7 @@ usersRouter.patch('/:id', requireRole('admin'), async (req, res) => {
     const result = await pool.query(
       `UPDATE users SET ${setClauses.join(', ')}
        WHERE id = $${params.length - 1} AND tenant_id = $${params.length}
-       RETURNING id, name, email, role, is_active, created_at`,
+       RETURNING id, name, email, role, is_active, team_id, created_at`,
       params
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'User not found' });

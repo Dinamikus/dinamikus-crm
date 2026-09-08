@@ -66,6 +66,19 @@ main header{display:flex;justify-content:space-between;align-items:flex-start;ga
 .badge.pending{background:#fffaeb;color:#b54708}
 .remove-btn{border:0;background:none;color:#b42318;cursor:pointer;font-size:12px;font-weight:700}
 
+/* Pipeline (kanban real) */
+.kanban{display:flex;gap:14px;overflow-x:auto;padding-bottom:10px;align-items:flex-start}
+.kanban-col{background:#f8fafc;border-radius:14px;padding:12px;min-width:230px;flex:1 0 230px;max-height:calc(100vh - 220px);display:flex;flex-direction:column}
+.kanban-col.drag-over{background:#eff6ff;outline:2px dashed #2563eb}
+.kanban-col h3{font-size:13px;margin:0 0 12px;display:flex;justify-content:space-between;color:#344054}
+.kanban-col h3 span{color:#98a2b3;font-weight:400}
+.kanban-cards{overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px;min-height:40px}
+.kanban-card{background:white;border:1px solid #e5e9f0;border-radius:10px;padding:10px 12px;font-weight:700;font-size:13px;cursor:grab}
+.kanban-card:active{cursor:grabbing}
+.kanban-card.dragging{opacity:.4}
+.kanban-card small{display:block;color:#667085;font-weight:400;margin-top:4px;font-size:11px}
+.kanban-empty{color:#98a2b3;font-size:12px;text-align:center;padding:14px 0}
+
 /* Reports */
 .date-range{display:flex;align-items:flex-end;gap:10px;margin-bottom:18px;flex-wrap:wrap}
 .date-range label{display:grid;gap:4px;font-size:12px;font-weight:700;color:#344054}

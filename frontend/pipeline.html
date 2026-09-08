@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Pipeline — Dinamikus CRM</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><span>◆</span> Dinamikus CRM</div>
+    <nav>
+      <a href="/">Dashboard</a>
+      <a href="/inbox.html">Inbox</a>
+      <a href="/leads.html">Leads</a>
+      <a class="active" href="/pipeline.html">Pipeline</a>
+      <a href="/automations.html">Automatizaciones</a>
+      <a href="/channels.html">Canales</a>
+      <a href="/reports.html">Reportes</a>
+      <a href="/team.html">Equipo</a>
+    </nav>
+    <div class="tenant">
+      <small>EMPRESA</small>
+      <strong id="tenantName">—</strong>
+      <span>Plan Starter</span>
+      <a href="#" id="logoutLink">Cerrar sesión</a>
+    </div>
+  </aside>
+
+  <main>
+    <header>
+      <div>
+        <p class="eyebrow">CRM SAAS</p>
+        <h1>Pipeline</h1>
+        <p class="muted" id="pipelineHint">Arrastra un lead entre columnas para cambiar su estado.</p>
+      </div>
+    </header>
+
+    <div id="kanban" class="kanban">
+      <p class="muted">Cargando…</p>
+    </div>
+  </main>
+
+  <script src="/auth.js"></script>
+  <script src="/pipeline.js"></script>
+</body>
+</html>
