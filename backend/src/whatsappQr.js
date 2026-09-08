@@ -102,7 +102,22 @@ export async function startSession(channelId, tenantId, ownerUserId) {
         continue;
       }
 
-      const contactId = remoteJid.split('@')[0];
+      // Cuando WhatsApp manda el contacto como @lid (identificador de privacidad),
+      // Baileys igual trae el número de teléfono real en senderPn — lo usamos para
+      // no perder el dato que más le importa al negocio: el teléfono real del contacto.
+      let identifyBy = 'phone';
+      let contactId = remoteJid.split('@')[0];
+      if (isLid) {
+        const senderPn = msg.key.senderPn || msg.key.participantPn;
+        if (senderPn) {
+          contactId = senderPn.split('@')[0];
+          console.log(`[whatsapp_qr ${channelId}] @lid resuelto a telefono real via senderPn: ${contactId}`);
+        } else {
+          identifyBy = 'external_user_id';
+          console.log(`[whatsapp_qr ${channelId}] @lid sin senderPn disponible, se guarda solo como identificador: ${contactId}`);
+        }
+      }
+
       const body = extractText(msg.message);
       console.log(`[whatsapp_qr ${channelId}] texto extraido: ${JSON.stringify(body)}`);
       if (!body) continue; // adjuntos sin texto: se omiten en esta primera versión
@@ -117,7 +132,7 @@ export async function startSession(channelId, tenantId, ownerUserId) {
         await ingestOutboundMessageFromDevice({
           tenantId,
           channelId,
-          identifyBy: isLid ? 'external_user_id' : 'phone',
+          identifyBy,
           toId: contactId,
           externalMessageId: msg.key.id,
           messageType: 'text',
@@ -132,7 +147,7 @@ export async function startSession(channelId, tenantId, ownerUserId) {
           channelExternalId,
           channelAccessTokenEncrypted: null,
           channelOwnerUserId: ownerUserId,
-          identifyBy: isLid ? 'external_user_id' : 'phone',
+          identifyBy,
           fromId: contactId,
           contactName: msg.pushName || null,
           externalMessageId: msg.key.id,
