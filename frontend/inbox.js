@@ -156,7 +156,13 @@ async function openConversation(id) {
   document.querySelectorAll('.convo-item').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.id === id);
   });
+  document.querySelector('#inboxSection').classList.add('thread-open');
   await renderThread(id);
+}
+
+function backToList() {
+  activeConversationId = null;
+  document.querySelector('#inboxSection').classList.remove('thread-open');
 }
 
 async function renderThread(id) {
@@ -184,6 +190,7 @@ async function renderThread(id) {
       .join('');
 
     thread.innerHTML = `
+      <button class="thread-back" id="threadBackBtn">← Volver a conversaciones</button>
       <div class="thread-head">
         <div>
           <h2>${escapeHtml(conversation.lead_name || conversation.lead_phone || 'Sin nombre')}</h2>
@@ -204,6 +211,8 @@ async function renderThread(id) {
       </form>`
       }
     `;
+
+    document.querySelector('#threadBackBtn').addEventListener('click', backToList);
 
     const threadMessages = document.querySelector('#threadMessages');
     threadMessages.scrollTop = threadMessages.scrollHeight;

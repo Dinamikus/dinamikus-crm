@@ -19,6 +19,14 @@
 
 /* Inbox */
 .inbox{display:grid;grid-template-columns:340px 1fr;gap:20px;height:calc(100vh - 170px)}
+.thread-back{display:none;border:0;background:none;color:#2563eb;font-weight:700;font-size:13px;cursor:pointer;align-items:center;gap:4px;padding:10px 16px 0}
+@media(max-width:900px){
+  .inbox{grid-template-columns:1fr;height:calc(100vh - 200px)}
+  .thread{display:none}
+  .inbox.thread-open .convo-list{display:none}
+  .inbox.thread-open .thread{display:flex}
+  .thread-back{display:flex}
+}
 .convo-list{background:white;border:1px solid #e5e9f0;border-radius:16px;overflow:hidden;display:flex;flex-direction:column}
 .convo-filters{display:flex;gap:8px;padding:12px;border-bottom:1px solid #edf0f5}
 .convo-filters select{flex:1;min-width:0;padding:7px 8px;border:1px solid #d0d5dd;border-radius:8px;font-size:12px;font-family:inherit}
