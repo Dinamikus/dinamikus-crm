@@ -54,3 +54,38 @@ function logout() {
   clearSession();
   window.location.href = '/login.html';
 }
+
+// Menú móvil: el sidebar de escritorio se convierte en un panel deslizante en
+// pantallas angostas. Se activa solo en páginas que tienen sidebar (no en
+// login/register). Se llama directo (no en DOMContentLoaded) porque este script
+// carga al final del body, cuando el DOM ya está listo.
+function setupMobileNav() {
+  const sidebar = document.querySelector('.sidebar');
+  if (!sidebar || document.querySelector('.mobile-nav-toggle')) return;
+
+  const toggle = document.createElement('button');
+  toggle.className = 'mobile-nav-toggle';
+  toggle.setAttribute('aria-label', 'Abrir menú');
+  toggle.textContent = '☰';
+  document.body.prepend(toggle);
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'sidebar-backdrop';
+  document.body.appendChild(backdrop);
+
+  function closeNav() {
+    sidebar.classList.remove('mobile-open');
+    backdrop.classList.remove('visible');
+  }
+  function openNav() {
+    sidebar.classList.add('mobile-open');
+    backdrop.classList.add('visible');
+  }
+
+  toggle.addEventListener('click', () => {
+    sidebar.classList.contains('mobile-open') ? closeNav() : openNav();
+  });
+  backdrop.addEventListener('click', closeNav);
+  sidebar.querySelectorAll('nav a').forEach((a) => a.addEventListener('click', closeNav));
+}
+setupMobileNav();

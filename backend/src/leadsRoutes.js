@@ -140,6 +140,54 @@ leadsRouter.patch('/:id', async (req, res) => {
   }
 });
 
+// POST /api/leads — crear un lead manualmente (arregla el botón "+ Nuevo lead"
+// del dashboard). Un agent que crea uno queda asignado automáticamente a sí
+// mismo — si lo está agregando a mano, seguramente ya es suyo (referido,
+// contacto directo, etc). Un admin puede asignarlo a quien quiera, o dejarlo
+// sin asignar. Un supervisor no crea leads — su función es repartir los que
+// ya existen, no dar de alta contactos nuevos.
+leadsRouter.post('/', async (req, res) => {
+  const { role } = req.user;
+  if (role === 'supervisor') {
+    return res.status(403).json({ error: 'Un supervisor no puede crear leads nuevos' });
+  }
+
+  const { phone: rawPhone, name, notes, assignedUserId } = req.body || {};
+  const phone = normalizePhone(rawPhone);
+  if (!phone) {
+    return res.status(400).json({ error: 'phone es obligatorio y debe ser un número válido' });
+  }
+
+  let finalAssignee = null;
+  if (role === 'agent') {
+    finalAssignee = req.user.id; // siempre asignado a quien lo crea
+  } else if (role === 'admin' && assignedUserId) {
+    const agent = await pool.query('SELECT id FROM users WHERE id = $1 AND tenant_id = $2', [
+      assignedUserId,
+      req.user.tenantId
+    ]);
+    if (agent.rowCount === 0) {
+      return res.status(400).json({ error: 'assignedUserId no pertenece a este negocio' });
+    }
+    finalAssignee = assignedUserId;
+  }
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO leads (tenant_id, name, phone, source, status, notes, assigned_user_id)
+       VALUES ($1, $2, $3, 'manual', 'new', $4, $5)
+       RETURNING id, name, phone, source, status, assigned_user_id, created_at`,
+      [req.user.tenantId, name ? String(name).trim().slice(0, 200) : null, phone, notes || null, finalAssignee]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'Ya existe un lead con ese número de teléfono' });
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // POST /api/leads/import — carga masiva de números (ej. desde un formulario de
 // Facebook Ads exportado a Excel/CSV). Solo admin: es una acción de datos a nivel
 // de negocio, no de un lead individual. Los que ya existen (por teléfono) se

@@ -197,6 +197,14 @@ Bases de datos nuevas no necesitan esto — `schema.sql` ya incluye los ocho cam
 - Frontend `/pipeline.html` — una columna por estado del lead (Nuevo, En conversación, Recontacto, Cita, Cierre, No le interesa). Arrastra una tarjeta a otra columna para cambiar el estado del lead — usa el mismo `PATCH /api/leads/:id` de siempre, así que respeta las mismas reglas de permisos por rol ya existentes: un `agent` solo puede mover sus propios leads, un `supervisor` no puede mover ninguno (solo reasignar, no cambiar estado), un `admin` puede mover cualquiera.
 - No hay endpoints nuevos — reutiliza `GET /api/leads` (ya filtra por rol) para pintar el tablero.
 
+## Menú móvil y limpieza del dashboard
+- **Menú móvil**: el sidebar de escritorio ahora se convierte en un panel deslizante en pantallas angostas, con un botón ☰ fijo arriba a la izquierda y un fondo oscuro para cerrarlo — antes simplemente desaparecía sin ninguna forma de abrirlo. Vive en `auth.js` (`setupMobileNav`), así que aplica automáticamente a todas las páginas sin tocar cada `.html` — no hace nada en páginas sin sidebar (login/register).
+- **Dashboard sin datos de muestra**: el panel principal (`/`) traía desde el MVP original tarjetas de ejemplo (leads y conversaciones inventados: "María López", "Ana García", etc.) que nunca estuvieron conectadas a la base de datos — por eso los botones no hacían nada. Ya se reemplazó todo por datos reales:
+  - **"+ Nuevo lead"** ahora funciona de verdad — `POST /api/leads` crea un lead manualmente (número + nombre opcional). Un `agent` que lo crea queda asignado automáticamente a sí mismo; un `admin` puede dejarlo sin asignar o asignarlo; un `supervisor` no puede crear leads (403 — no es su función).
+  - El resumen de "Pipeline" en el dashboard ahora muestra los conteos reales por estado, con "Ver todo" llevando a `/pipeline.html`.
+  - "Conversaciones recientes" ahora trae las últimas conversaciones reales del inbox, con "Inbox" llevando a `/inbox.html`.
+  - Las tarjetas de "WhatsApp: Conectado" y "Canales: 1/3" (fijas, sin importar la realidad) se reemplazaron por conteos reales de `/api/channels`.
+
 ## Próximas fases
 1. ~~Autenticación real y roles.~~ ✅
 2. ~~Alta de empresas/tenants.~~ ✅
