@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Plataforma — Dinamikus CRM</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><span>◆</span> Dinamikus CRM</div>
+    <nav>
+      <a href="/">Dashboard</a>
+      <a href="/inbox.html">Inbox</a>
+      <a href="/leads.html">Leads</a>
+      <a href="/pipeline.html">Pipeline</a>
+      <a href="/automations.html">Automatizaciones</a>
+      <a href="/channels.html">Canales</a>
+      <a href="/reports.html">Reportes</a>
+      <a href="/team.html">Equipo</a>
+    </nav>
+    <div class="tenant">
+      <small>EMPRESA</small>
+      <strong id="tenantName">—</strong>
+      <span>Plan Starter</span>
+      <a href="#" id="logoutLink">Cerrar sesión</a>
+    </div>
+  </aside>
+
+  <main>
+    <header>
+      <div>
+        <p class="eyebrow">CRM SAAS</p>
+        <h1>Plataforma</h1>
+        <p class="muted">Todos los negocios registrados en tu sistema — visible solo para ti.</p>
+      </div>
+    </header>
+
+    <div id="notPlatformAdminNotice" class="card" style="display:none">
+      <p class="muted">Esta sección es exclusiva del dueño de la plataforma.</p>
+    </div>
+
+    <div class="card" id="tenantsCard" style="overflow-x:auto">
+      <table class="report-table" id="tenantsTable">
+        <thead>
+          <tr>
+            <th>Negocio</th>
+            <th>Admin</th>
+            <th>Usuarios</th>
+            <th>Registrado</th>
+            <th>Último lead</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tenantsBody">
+          <tr><td colspan="7" class="muted">Cargando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <script src="/auth.js"></script>
+  <script src="/platform.js"></script>
+</body>
+</html>

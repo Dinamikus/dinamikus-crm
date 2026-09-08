@@ -25,9 +25,10 @@ export function verifyToken(token) {
   return jwt.verify(token, JWT_SECRET);
 }
 
-// Express middleware: requires a valid Bearer token, attaches req.user = { id, tenantId, role }.
-// También confirma en la base que el usuario siga activo — así, si un admin desactiva
-// a alguien, su sesión deja de funcionar de inmediato en vez de esperar a que el token expire.
+// Express middleware: requires a valid Bearer token, attaches req.user = { id, tenantId, role, isPlatformAdmin }.
+// También confirma en la base que el usuario siga activo Y que su negocio no esté
+// pausado — así, si se desactiva a alguien o se pausa todo un negocio, el acceso
+// se corta de inmediato en la siguiente petición, no hasta que expire el token.
 export async function requireAuth(req, res, next) {
   const header = req.headers.authorization || '';
   const [scheme, token] = header.split(' ');
@@ -39,16 +40,38 @@ export async function requireAuth(req, res, next) {
   try {
     const decoded = verifyToken(token);
 
-    const result = await pool.query('SELECT is_active FROM users WHERE id = $1', [decoded.sub]);
+    const result = await pool.query(
+      `SELECT u.is_active, u.is_platform_admin, t.is_active AS tenant_is_active
+       FROM users u JOIN tenants t ON t.id = u.tenant_id
+       WHERE u.id = $1`,
+      [decoded.sub]
+    );
     if (result.rowCount === 0 || !result.rows[0].is_active) {
       return res.status(401).json({ error: 'Esta cuenta fue desactivada' });
     }
+    if (!result.rows[0].tenant_is_active) {
+      return res.status(403).json({ error: 'Este negocio fue pausado. Contacta a tu proveedor.' });
+    }
 
-    req.user = { id: decoded.sub, tenantId: decoded.tenantId, role: decoded.role };
+    req.user = {
+      id: decoded.sub,
+      tenantId: decoded.tenantId,
+      role: decoded.role,
+      isPlatformAdmin: result.rows[0].is_platform_admin
+    };
     next();
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
+}
+
+// Gate para endpoints exclusivos del dueño de la plataforma (ve todos los negocios,
+// no solo el suyo). No es un "role" de tenant — es un permiso aparte, orthogonal.
+export function requirePlatformAdmin(req, res, next) {
+  if (!req.user || !req.user.isPlatformAdmin) {
+    return res.status(403).json({ error: 'Solo el dueño de la plataforma puede hacer esto' });
+  }
+  next();
 }
 
 // Optional role gate: use after requireAuth, e.g. requireRole('admin')

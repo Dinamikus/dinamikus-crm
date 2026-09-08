@@ -206,6 +206,22 @@ Bases de datos nuevas no necesitan esto — `schema.sql` ya incluye los ocho cam
   - "Conversaciones recientes" ahora trae las últimas conversaciones reales del inbox, con "Inbox" llevando a `/inbox.html`.
   - Las tarjetas de "WhatsApp: Conectado" y "Canales: 1/3" (fijas, sin importar la realidad) se reemplazaron por conteos reales de `/api/channels`.
 
+## Panel de plataforma (ver y pausar negocios)
+Como Dinamikus va a tener varios negocios distintos usando el mismo CRM, alguien necesita poder ver TODOS los negocios registrados y pausar uno completo si deja de trabajar contigo — algo que ningún rol de tenant (`admin`/`supervisor`/`agent`) puede hacer, porque todos están limitados a su propio negocio por diseño.
+
+- **`is_platform_admin`** (en `users`) — un permiso aparte, ortogonal al `role` de tenant. **Nunca** se otorga por registro normal (`isPlatformAdmin: false` está hardcodeado en la respuesta de `/api/auth/register`, sin importar nada del request) — se otorga a mano, una sola vez, directo en la base de datos.
+- **`tenants.is_active`** — pausar un negocio completo. Distinto de `users.is_active` (que pausa un usuario individual): esto bloquea a TODOS los usuarios de ese negocio a la vez, sin borrar absolutamente nada — leads, mensajes, historial, todo queda intacto para cuando se reactive.
+- El bloqueo es en tiempo real: `requireAuth` revisa `is_active` del usuario Y del tenant en cada petición (no solo en el login), así que pausar corta el acceso al instante — incluso a sesiones con un token ya emitido, sin esperar a que expire.
+- **`GET /api/platform/tenants`** / **`PATCH /api/platform/tenants/:id`** — solo accesibles para quien tenga `is_platform_admin = true` (middleware `requirePlatformAdmin`).
+- Frontend: `/platform.html` — tabla con todos los negocios (nombre, correo del admin, cantidad de usuarios, fecha de registro, último lead, estado) con botón de pausar/reactivar por fila. El link "Plataforma" en el menú se agrega **por código** (`auth.js`) solo si el usuario tiene el permiso — no aparece en ninguna página para nadie más, sin tener que tocar el HTML de cada una.
+
+### Cómo otorgarte el permiso de dueño de plataforma (una sola vez)
+Después de correr la migración, en la consola de Postgres de Railway:
+```sql
+UPDATE users SET is_platform_admin = true WHERE email = 'tu-correo@dinamikus.com';
+```
+Vuelve a iniciar sesión (o simplemente recarga — el permiso se revisa en tiempo real, no hace falta ni volver a loguearte) y el link "Plataforma" va a aparecer en tu menú.
+
 ## Próximas fases
 1. ~~Autenticación real y roles.~~ ✅
 2. ~~Alta de empresas/tenants.~~ ✅

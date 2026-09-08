@@ -50,7 +50,7 @@ authRouter.post('/register', async (req, res) => {
     const token = signToken({ sub: user.id, tenantId: tenant.id, role: user.role });
     res.status(201).json({
       token,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      user: { id: user.id, name: user.name, email: user.email, role: user.role, isPlatformAdmin: false },
       tenant: { id: tenant.id, name: tenant.name }
     });
   } catch (error) {
@@ -70,8 +70,8 @@ authRouter.post('/login', async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT u.id, u.name, u.email, u.password_hash, u.role, u.is_active,
-              u.tenant_id, t.name AS tenant_name
+      `SELECT u.id, u.name, u.email, u.password_hash, u.role, u.is_active, u.is_platform_admin,
+              u.tenant_id, t.name AS tenant_name, t.is_active AS tenant_is_active
        FROM users u
        JOIN tenants t ON t.id = u.tenant_id
        WHERE u.email = $1`,
@@ -90,11 +90,14 @@ authRouter.post('/login', async (req, res) => {
     if (!user.is_active) {
       return res.status(403).json({ error: 'Esta cuenta fue desactivada. Contacta a tu administrador.' });
     }
+    if (!user.tenant_is_active) {
+      return res.status(403).json({ error: 'Este negocio fue pausado. Contacta a tu proveedor.' });
+    }
 
     const token = signToken({ sub: user.id, tenantId: user.tenant_id, role: user.role });
     res.json({
       token,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      user: { id: user.id, name: user.name, email: user.email, role: user.role, isPlatformAdmin: user.is_platform_admin },
       tenant: { id: user.tenant_id, name: user.tenant_name }
     });
   } catch (error) {
@@ -106,7 +109,7 @@ authRouter.post('/login', async (req, res) => {
 authRouter.get('/me', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT u.id, u.name, u.email, u.role, t.id AS tenant_id, t.name AS tenant_name
+      `SELECT u.id, u.name, u.email, u.role, u.is_platform_admin, t.id AS tenant_id, t.name AS tenant_name
        FROM users u JOIN tenants t ON t.id = u.tenant_id
        WHERE u.id = $1`,
       [req.user.id]
@@ -115,7 +118,7 @@ authRouter.get('/me', requireAuth, async (req, res) => {
 
     const row = result.rows[0];
     res.json({
-      user: { id: row.id, name: row.name, email: row.email, role: row.role },
+      user: { id: row.id, name: row.name, email: row.email, role: row.role, isPlatformAdmin: row.is_platform_admin },
       tenant: { id: row.tenant_id, name: row.tenant_name }
     });
   } catch (error) {

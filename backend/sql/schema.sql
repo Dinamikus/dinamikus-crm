@@ -4,6 +4,10 @@ CREATE TABLE IF NOT EXISTS tenants (
   auto_assign_leads BOOLEAN NOT NULL DEFAULT false,
   welcome_message_enabled BOOLEAN NOT NULL DEFAULT false,
   welcome_message TEXT NOT NULL DEFAULT 'Gracias por escribirnos. En breve un asesor te atiende.',
+  -- Pausar un negocio completo (ej. dejó de pagar / dejó de trabajar contigo).
+  -- A diferencia de users.is_active (que pausa UN usuario), esto bloquea a
+  -- TODOS los usuarios de ese negocio a la vez, sin borrar nada.
+  is_active BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -15,6 +19,10 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'admin' CHECK (role IN ('admin','supervisor','agent')),
   is_active BOOLEAN NOT NULL DEFAULT true,
+  -- Dueño de la plataforma (tú, Dinamikus) — ve y gestiona TODOS los negocios,
+  -- no solo el suyo. Nunca se activa por registro normal ni por ningún endpoint;
+  -- solo se otorga a mano, directo en la base de datos, una vez.
+  is_platform_admin BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

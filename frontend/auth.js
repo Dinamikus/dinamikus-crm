@@ -89,3 +89,18 @@ function setupMobileNav() {
   sidebar.querySelectorAll('nav a').forEach((a) => a.addEventListener('click', closeNav));
 }
 setupMobileNav();
+
+// Solo el dueño de la plataforma ve este link — se agrega por código para no
+// tener que tocar el HTML de cada página. Cualquier otro usuario nunca lo ve.
+function setupPlatformNavLink() {
+  const nav = document.querySelector('.sidebar nav');
+  const user = JSON.parse(localStorage.getItem('dinamikus_user') || 'null');
+  if (!nav || !user || !user.isPlatformAdmin || nav.querySelector('a[href="/platform.html"]')) return;
+
+  const link = document.createElement('a');
+  link.href = '/platform.html';
+  link.textContent = 'Plataforma';
+  if (window.location.pathname === '/platform.html') link.className = 'active';
+  nav.appendChild(link);
+}
+setupPlatformNavLink();
