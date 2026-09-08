@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { pool } from './db.js';
-import { requireAuth, requirePlatformAdmin } from './auth.js';
+import { requireAuth, requirePlatformAdmin, hashPassword } from './auth.js';
 
 export const platformRouter = Router();
 platformRouter.use(requireAuth, requirePlatformAdmin);
@@ -24,6 +24,59 @@ platformRouter.get('/tenants', async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/platform/tenants — tú creas un negocio nuevo con su primer admin,
+// en vez de que el cliente se autoregistre. Tú defines la contraseña aquí mismo
+// para entregársela directamente — mismo patrón que ya usas para crear asesores
+// en "Equipo", pero a nivel de negocio completo.
+platformRouter.post('/tenants', async (req, res) => {
+  const { businessName, adminName, email, password } = req.body || {};
+
+  if (!businessName || !adminName || !email || !password) {
+    return res.status(400).json({
+      error: 'businessName, adminName, email and password are required'
+    });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const existing = await client.query('SELECT id FROM users WHERE email = $1', [
+      email.toLowerCase()
+    ]);
+    if (existing.rowCount > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Ese correo ya está registrado' });
+    }
+
+    const tenantResult = await client.query(
+      'INSERT INTO tenants (name) VALUES ($1) RETURNING id, name, is_active, created_at',
+      [businessName]
+    );
+    const tenant = tenantResult.rows[0];
+
+    const passwordHash = await hashPassword(password);
+    const userResult = await client.query(
+      `INSERT INTO users (tenant_id, name, email, password_hash, role)
+       VALUES ($1, $2, $3, $4, 'admin')
+       RETURNING id, name, email, role`,
+      [tenant.id, adminName, email.toLowerCase(), passwordHash]
+    );
+    const user = userResult.rows[0];
+
+    await client.query('COMMIT');
+    res.status(201).json({ tenant, admin: user });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
   }
 });
 

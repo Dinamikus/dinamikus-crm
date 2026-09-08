@@ -40,6 +40,23 @@
       <p class="muted">Esta sección es exclusiva del dueño de la plataforma.</p>
     </div>
 
+    <div class="card" id="createTenantCard" style="display:none;margin-bottom:20px">
+      <h3>Crear negocio nuevo</h3>
+      <p class="muted">Genera las credenciales del primer administrador y entrégaselas directamente al cliente.</p>
+      <form id="createTenantForm" style="display:grid;gap:10px;margin-top:10px;max-width:420px">
+        <input type="text" name="businessName" placeholder="Nombre del negocio" required style="padding:10px;border:1px solid #d0d5dd;border-radius:8px">
+        <input type="text" name="adminName" placeholder="Nombre del administrador" required style="padding:10px;border:1px solid #d0d5dd;border-radius:8px">
+        <input type="email" name="email" placeholder="Correo del administrador" required style="padding:10px;border:1px solid #d0d5dd;border-radius:8px">
+        <div style="display:flex;gap:8px">
+          <input type="text" name="password" id="newTenantPassword" placeholder="Contraseña" required minlength="8" style="flex:1;padding:10px;border:1px solid #d0d5dd;border-radius:8px">
+          <button type="button" id="genTenantPasswordBtn" style="padding:0 14px;border:1px solid #d0d5dd;border-radius:8px;background:white;cursor:pointer;font-size:12px">Generar</button>
+        </div>
+        <button type="submit" class="primary" style="width:fit-content">Crear negocio</button>
+      </form>
+      <div id="createTenantError" class="auth-error" style="margin-top:12px"></div>
+      <div id="createTenantSuccess" class="auth-error" style="margin-top:12px;background:#ecfdf3;color:#027a48"></div>
+    </div>
+
     <div class="card" id="tenantsCard" style="overflow-x:auto">
       <table class="report-table" id="tenantsTable">
         <thead>

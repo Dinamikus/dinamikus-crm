@@ -215,6 +215,11 @@ Como Dinamikus va a tener varios negocios distintos usando el mismo CRM, alguien
 - **`GET /api/platform/tenants`** / **`PATCH /api/platform/tenants/:id`** — solo accesibles para quien tenga `is_platform_admin = true` (middleware `requirePlatformAdmin`).
 - Frontend: `/platform.html` — tabla con todos los negocios (nombre, correo del admin, cantidad de usuarios, fecha de registro, último lead, estado) con botón de pausar/reactivar por fila. El link "Plataforma" en el menú se agrega **por código** (`auth.js`) solo si el usuario tiene el permiso — no aparece en ninguna página para nadie más, sin tener que tocar el HTML de cada una.
 
+- **`POST /api/platform/tenants`** — crea un negocio nuevo con su primer admin directamente (tú defines el correo y la contraseña, para entregársela al cliente) — evita depender de que el cliente se autoregistre solo. Mismo patrón que crear un asesor en "Equipo", pero a nivel de negocio completo. Frontend: formulario "Crear negocio nuevo" en `/platform.html`, con botón de generar contraseña.
+
+## Registro público cerrado
+Por decisión del dueño de la plataforma, `POST /api/auth/register` está bloqueado (devuelve 403) — los negocios nuevos ahora se crean **exclusivamente** desde `POST /api/platform/tenants` (panel "Plataforma"). El código original de registro se dejó comentado dentro del mismo archivo (`authRoutes.js`), sin borrar, por si algún día se quiere reabrir el autoregistro — basta con quitar el bloqueo del principio de la función. `/login.html` ya no muestra el link a `/register.html`, y esa página ahora solo muestra un mensaje explicando que el registro está cerrado (por si alguien llega directo a la URL).
+
 ### Cómo otorgarte el permiso de dueño de plataforma (una sola vez)
 Después de correr la migración, en la consola de Postgres de Railway:
 ```sql

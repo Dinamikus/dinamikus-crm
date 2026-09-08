@@ -14,7 +14,64 @@ if (!currentUser || !currentUser.isPlatformAdmin) {
   document.querySelector('#notPlatformAdminNotice').style.display = 'block';
   document.querySelector('#tenantsCard').style.display = 'none';
 } else {
+  document.querySelector('#createTenantCard').style.display = 'block';
   loadTenants();
+}
+
+function generatePassword() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+  let pass = '';
+  const values = new Uint32Array(12);
+  crypto.getRandomValues(values);
+  for (let i = 0; i < 12; i++) pass += chars[values[i] % chars.length];
+  return pass;
+}
+
+const genBtn = document.querySelector('#genTenantPasswordBtn');
+if (genBtn) {
+  genBtn.addEventListener('click', () => {
+    document.querySelector('#newTenantPassword').value = generatePassword();
+  });
+}
+
+const createTenantForm = document.querySelector('#createTenantForm');
+if (createTenantForm) {
+  createTenantForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errorBox = document.querySelector('#createTenantError');
+    const successBox = document.querySelector('#createTenantSuccess');
+    errorBox.classList.remove('visible');
+    successBox.classList.remove('visible');
+
+    const form = new FormData(e.target);
+    const body = {
+      businessName: form.get('businessName'),
+      adminName: form.get('adminName'),
+      email: form.get('email'),
+      password: form.get('password')
+    };
+
+    try {
+      const r = await authFetch('/api/platform/tenants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        errorBox.textContent = data.error || 'No se pudo crear el negocio.';
+        errorBox.classList.add('visible');
+        return;
+      }
+      successBox.textContent = `Negocio "${data.tenant.name}" creado. Entrégale a ${data.admin.name}: correo ${data.admin.email}, y la contraseña que generaste arriba.`;
+      successBox.classList.add('visible');
+      e.target.reset();
+      loadTenants();
+    } catch {
+      errorBox.textContent = 'Error de conexión al crear el negocio.';
+      errorBox.classList.add('visible');
+    }
+  });
 }
 
 function escapeHtml(str) {

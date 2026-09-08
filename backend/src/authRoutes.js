@@ -6,7 +6,17 @@ export const authRouter = Router();
 
 // POST /api/auth/register
 // Crea un nuevo negocio (tenant) junto con su primer usuario admin.
+//
+// CERRADO por decisión del dueño de la plataforma: los negocios nuevos ahora
+// se crean exclusivamente desde /api/platform/tenants (panel "Plataforma").
+// La lógica de abajo se deja intacta, sin borrar, por si algún día se quiere
+// reabrir el autoregistro — para eso, basta con quitar este bloque.
 authRouter.post('/register', async (req, res) => {
+  return res.status(403).json({
+    error: 'El registro público está cerrado. Contacta a Dinamikus para crear tu cuenta.'
+  });
+
+  // eslint-disable-next-line no-unreachable
   const { businessName, adminName, email, password } = req.body || {};
 
   if (!businessName || !adminName || !email || !password) {
