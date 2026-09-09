@@ -21,6 +21,7 @@ export async function ingestInboundMessage({
   channelOwnerUserId,
   identifyBy,
   fromId,
+  secondaryExternalId,
   contactName,
   externalMessageId,
   messageType,
@@ -35,14 +36,40 @@ export async function ingestInboundMessage({
 
     let leadResult;
     if (identifyBy === 'phone') {
-      leadResult = await client.query(
-        `INSERT INTO leads (tenant_id, channel_id, name, phone, external_user_id, source, status)
-         VALUES ($1, $2, $3, $4, $5, $6, 'new')
-         ON CONFLICT (tenant_id, phone) WHERE phone IS NOT NULL
-         DO UPDATE SET name = COALESCE(leads.name, EXCLUDED.name), updated_at = NOW()
-         RETURNING id, (xmax = 0) AS is_new`,
-        [tenantId, channelId, contactName, fromId, fromId, channelType]
-      );
+      const extId = secondaryExternalId || fromId;
+
+      // Si ya existe un lead de este MISMO contacto creado antes solo por su LID
+      // (porque su primer mensaje no traía el teléfono), complétalo con el teléfono
+      // en vez de crear uno nuevo — evita duplicar al mismo cliente.
+      if (secondaryExternalId) {
+        const existingByLid = await client.query(
+          `SELECT id FROM leads WHERE tenant_id = $1 AND channel_id = $2
+           AND external_user_id = $3 AND phone IS NULL`,
+          [tenantId, channelId, secondaryExternalId]
+        );
+        if (existingByLid.rowCount > 0) {
+          const updated = await client.query(
+            `UPDATE leads SET phone = $1, name = COALESCE(name, $2), updated_at = NOW()
+             WHERE id = $3 RETURNING id, false AS is_new`,
+            [fromId, contactName, existingByLid.rows[0].id]
+          );
+          leadResult = updated;
+        }
+      }
+
+      if (!leadResult) {
+        leadResult = await client.query(
+          `INSERT INTO leads (tenant_id, channel_id, name, phone, external_user_id, source, status)
+           VALUES ($1, $2, $3, $4, $5, $6, 'new')
+           ON CONFLICT (tenant_id, phone) WHERE phone IS NOT NULL
+           DO UPDATE SET
+             name = COALESCE(leads.name, EXCLUDED.name),
+             external_user_id = COALESCE(EXCLUDED.external_user_id, leads.external_user_id),
+             updated_at = NOW()
+           RETURNING id, (xmax = 0) AS is_new`,
+          [tenantId, channelId, contactName, fromId, extId, channelType]
+        );
+      }
     } else {
       leadResult = await client.query(
         `INSERT INTO leads (tenant_id, channel_id, name, external_user_id, source, status)
@@ -135,8 +162,7 @@ export async function ingestInboundMessage({
 export async function ingestOutboundMessageFromDevice({
   tenantId,
   channelId,
-  identifyBy,
-  toId,
+  candidateIds,
   externalMessageId,
   messageType,
   body,
@@ -146,10 +172,19 @@ export async function ingestOutboundMessageFromDevice({
   try {
     await client.query('BEGIN');
 
-    const column = identifyBy === 'external_user_id' ? 'external_user_id' : 'phone';
+    const ids = (Array.isArray(candidateIds) ? candidateIds : [candidateIds]).filter(Boolean);
+    if (ids.length === 0) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+
+    // Busca por CUALQUIERA de los identificadores que tengamos (teléfono y/o LID) —
+    // así, si este mensaje en particular solo trae el LID, igual encuentra el lead
+    // que ya se había creado antes con el teléfono real resuelto de un mensaje anterior.
     const lead = await client.query(
-      `SELECT id FROM leads WHERE tenant_id = $1 AND channel_id = $2 AND ${column} = $3`,
-      [tenantId, channelId, toId]
+      `SELECT id FROM leads WHERE tenant_id = $1 AND channel_id = $2
+       AND (phone = ANY($3::text[]) OR external_user_id = ANY($3::text[]))`,
+      [tenantId, channelId, ids]
     );
     if (lead.rowCount === 0) {
       // No hay lead para este destinatario todavía — no es una conversación que

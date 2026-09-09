@@ -103,18 +103,20 @@ export async function startSession(channelId, tenantId, ownerUserId) {
       }
 
       // Cuando WhatsApp manda el contacto como @lid (identificador de privacidad),
-      // Baileys igual trae el número de teléfono real en senderPn — lo usamos para
+      // Baileys a veces trae el número de teléfono real en senderPn — lo usamos para
       // no perder el dato que más le importa al negocio: el teléfono real del contacto.
-      let identifyBy = 'phone';
-      let contactId = remoteJid.split('@')[0];
+      // Guardamos AMBOS identificadores (LID y teléfono, cuando los tengamos) porque
+      // no todos los mensajes de la misma conversación traen el teléfono — sin esto,
+      // un mensaje sin senderPn no encontraba el lead ya creado y se perdía del hilo.
+      const rawLid = isLid ? remoteJid.split('@')[0] : null;
+      let resolvedPhone = isPhoneJid ? remoteJid.split('@')[0] : null;
       if (isLid) {
         const senderPn = msg.key.senderPn || msg.key.participantPn;
         if (senderPn) {
-          contactId = senderPn.split('@')[0];
-          console.log(`[whatsapp_qr ${channelId}] @lid resuelto a telefono real via senderPn: ${contactId}`);
+          resolvedPhone = senderPn.split('@')[0];
+          console.log(`[whatsapp_qr ${channelId}] @lid resuelto a telefono real via senderPn: ${resolvedPhone}`);
         } else {
-          identifyBy = 'external_user_id';
-          console.log(`[whatsapp_qr ${channelId}] @lid sin senderPn disponible, se guarda solo como identificador: ${contactId}`);
+          console.log(`[whatsapp_qr ${channelId}] @lid sin senderPn disponible, se guarda solo como identificador: ${rawLid}`);
         }
       }
 
@@ -128,17 +130,18 @@ export async function startSession(channelId, tenantId, ownerUserId) {
       const channelExternalId = channelRow.rows[0] && channelRow.rows[0].external_id;
 
       if (msg.key.fromMe) {
-        // El asesor respondió desde su propio celular, fuera del CRM.
-        await ingestOutboundMessageFromDevice({
+        // El asesor respondió desde su propio celular, fuera del CRM. Busca el lead
+        // por cualquiera de los identificadores que tengamos para este mensaje.
+        const outResult = await ingestOutboundMessageFromDevice({
           tenantId,
           channelId,
-          identifyBy,
-          toId: contactId,
+          candidateIds: [resolvedPhone, rawLid],
           externalMessageId: msg.key.id,
           messageType: 'text',
           body,
           rawPayload: msg
         });
+        console.log(`[whatsapp_qr ${channelId}] ingestOutboundMessageFromDevice resultado:`, outResult);
       } else {
         const result = await ingestInboundMessage({
           tenantId,
@@ -147,8 +150,9 @@ export async function startSession(channelId, tenantId, ownerUserId) {
           channelExternalId,
           channelAccessTokenEncrypted: null,
           channelOwnerUserId: ownerUserId,
-          identifyBy,
-          fromId: contactId,
+          identifyBy: resolvedPhone ? 'phone' : 'external_user_id',
+          fromId: resolvedPhone || rawLid,
+          secondaryExternalId: resolvedPhone ? rawLid : undefined,
           contactName: msg.pushName || null,
           externalMessageId: msg.key.id,
           messageType: 'text',
