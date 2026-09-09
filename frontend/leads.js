@@ -5,6 +5,9 @@ if (tenant) document.querySelector('#tenantName').textContent = tenant.name;
 
 const currentUser = JSON.parse(localStorage.getItem('dinamikus_user') || 'null');
 const isAdmin = currentUser && currentUser.role === 'admin';
+if (!isAdmin) {
+  document.querySelector('#exportBtn').style.display = 'none';
+}
 
 document.querySelector('#logoutLink').addEventListener('click', (e) => {
   e.preventDefault();

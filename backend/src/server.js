@@ -21,6 +21,7 @@ import { decryptSecret } from './crypto.js';
 import { whatsappQrRouter } from './whatsappQrRoutes.js';
 import { sendQrMessage, reconnectAllOnBoot } from './whatsappQr.js';
 import { safeJsonStringify } from './jsonUtils.js';
+import { getTeamAgentIds } from './teamScope.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -62,13 +63,26 @@ app.get('/api/public-config', (_req, res) => {
 // Dashboard data — escopado al tenant autenticado
 app.get('/api/dashboard', requireAuth, async (req, res) => {
   try {
-    const { tenantId } = req.user;
-    const total = await pool.query('SELECT COUNT(*)::int AS count FROM leads WHERE tenant_id = $1', [
-      tenantId
-    ]);
+    const { tenantId, role, id: userId } = req.user;
+    const params = [tenantId];
+    let scopeFilter = '';
+
+    if (role === 'agent') {
+      params.push(userId);
+      scopeFilter = `AND assigned_user_id = $${params.length}`;
+    } else if (role === 'supervisor') {
+      const teamAgentIds = await getTeamAgentIds(tenantId, userId);
+      params.push(teamAgentIds);
+      scopeFilter = `AND assigned_user_id = ANY($${params.length}::uuid[])`;
+    }
+
+    const total = await pool.query(
+      `SELECT COUNT(*)::int AS count FROM leads WHERE tenant_id = $1 ${scopeFilter}`,
+      params
+    );
     const open = await pool.query(
-      "SELECT COUNT(*)::int AS count FROM leads WHERE tenant_id = $1 AND status IN ('new','contacted','follow_up')",
-      [tenantId]
+      `SELECT COUNT(*)::int AS count FROM leads WHERE tenant_id = $1 AND status IN ('new','contacted','follow_up') ${scopeFilter}`,
+      params
     );
     res.json({
       totalLeads: total.rows[0].count,

@@ -12,6 +12,10 @@ usersRouter.use(requireAuth);
 // cuando lo pide un supervisor, limita la lista a los asesores de SU equipo
 // (para que su selector de "asignar a" no ofrezca gente de otro equipo).
 usersRouter.get('/', async (req, res) => {
+  if (req.user.role === 'agent') {
+    return res.status(403).json({ error: 'Un asesor no puede ver el listado del equipo' });
+  }
+
   const { active, scope } = req.query;
   const params = [req.user.tenantId];
   const filters = [];

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { pool } from './db.js';
 import { requireAuth, requireRole } from './auth.js';
 import { encryptSecret } from './crypto.js';
+import { getTeamAgentIds } from './teamScope.js';
 import {
   exchangeCodeForToken,
   subscribeAppToWaba,
@@ -11,13 +12,31 @@ import {
 export const channelsRouter = Router();
 channelsRouter.use(requireAuth);
 
-// GET /api/channels — lista los canales del tenant autenticado
+// GET /api/channels — lista los canales del tenant autenticado.
+// - admin: ve todos los canales del negocio (compartidos y los de cada asesor).
+// - supervisor: ve los canales del negocio en general, más los de su propio equipo.
+// - agent: ve SOLO los suyos (ej. su WhatsApp QR personal) — nunca los del negocio
+//   en general ni los de otros asesores.
 channelsRouter.get('/', async (req, res) => {
+  const { role, id: userId, tenantId } = req.user;
+
   try {
+    let filter = '';
+    const params = [tenantId];
+
+    if (role === 'agent') {
+      params.push(userId);
+      filter = `AND owner_user_id = $${params.length}`;
+    } else if (role === 'supervisor') {
+      const teamAgentIds = await getTeamAgentIds(tenantId, userId);
+      params.push(teamAgentIds);
+      filter = `AND (owner_user_id IS NULL OR owner_user_id = ANY($${params.length}::uuid[]))`;
+    }
+
     const result = await pool.query(
       `SELECT id, type, external_id, external_waba_id, display_name, status, owner_user_id, created_at
-       FROM channels WHERE tenant_id = $1 ORDER BY created_at DESC`,
-      [req.user.tenantId]
+       FROM channels WHERE tenant_id = $1 ${filter} ORDER BY created_at DESC`,
+      params
     );
     res.json(result.rows);
   } catch (error) {

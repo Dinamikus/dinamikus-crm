@@ -229,6 +229,16 @@ UPDATE users SET is_platform_admin = true WHERE email = 'tu-correo@dinamikus.com
 ```
 Vuelve a iniciar sesión (o simplemente recarga — el permiso se revisa en tiempo real, no hace falta ni volver a loguearte) y el link "Plataforma" va a aparecer en tu menú.
 
+## Vista individual del asesor (aislamiento total)
+A petición explícita: un `agent` ahora ve **solo lo suyo** en cada pantalla, sin excepción.
+- **Dashboard**: "Leads totales" y "Leads abiertos" cuentan solo los leads asignados a ese asesor (antes eran del negocio completo). De regalo, un `supervisor` ahora también ve estas cifras escopadas a su propio equipo, no al tenant completo — quedó inconsistente dejarlo tenant-wide mientras todo lo demás de supervisor ya era por equipo.
+- **Canales**: `GET /api/channels` para un `agent` solo devuelve los canales que **él mismo** conectó (ej. su WhatsApp QR personal) — ya no ve el WhatsApp/Instagram compartido del negocio ni los canales de otros asesores. Como esta lista alimenta tanto la tarjeta de "Canales conectados" del dashboard como la página de Canales, el aislamiento aplica en ambos lados automáticamente. Un `supervisor` ve los canales del negocio en general más los de su equipo (no los de otro supervisor).
+- **Equipo**: `GET /api/users` devuelve **403** para un `agent` — no puede ver el listado de compañeros ni aunque sea de solo lectura. `/team.html` le muestra un mensaje claro en vez de un error.
+- **Leads → Exportar CSV**: el botón ahora es exclusivo de `admin` (antes lo veía cualquier rol, aunque los datos ya estaban filtrados por rol).
+
+## Imágenes y audio en WhatsApp QR
+Antes, un mensaje de imagen, audio, video, documento, sticker o ubicación **sin texto/caption** se descartaba por completo — ni siquiera quedaba un rastro en el hilo. Ahora, igual que ya hacía WhatsApp Cloud API, queda una etiqueta legible (`[imagen]`, `[audio]`, `[audio de voz]`, `[documento]`, etc.) para que el mensaje no desaparezca del historial. Mostrar el archivo real (descargar y renderizar la imagen/audio) es un paso aparte, más grande, que queda pendiente si se quiere más adelante.
+
 ## Próximas fases
 1. ~~Autenticación real y roles.~~ ✅
 2. ~~Alta de empresas/tenants.~~ ✅

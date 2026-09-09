@@ -208,11 +208,22 @@ export async function reconnectAllOnBoot() {
 }
 
 function extractText(message) {
-  return (
+  const text =
     message.conversation ||
     (message.extendedTextMessage && message.extendedTextMessage.text) ||
     (message.imageMessage && message.imageMessage.caption) ||
     (message.videoMessage && message.videoMessage.caption) ||
-    null
-  );
+    null;
+  if (text) return text;
+
+  // Sin texto/caption: al menos deja una etiqueta en el hilo en vez de perder
+  // el mensaje por completo — mismo criterio que ya usa WhatsApp Cloud API.
+  if (message.imageMessage) return '[imagen]';
+  if (message.videoMessage) return '[video]';
+  if (message.audioMessage) return message.audioMessage.ptt ? '[audio de voz]' : '[audio]';
+  if (message.documentMessage) return '[documento]';
+  if (message.stickerMessage) return '[sticker]';
+  if (message.locationMessage) return '[ubicación]';
+  if (message.contactMessage) return '[contacto compartido]';
+  return null;
 }

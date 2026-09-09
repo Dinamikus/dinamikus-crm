@@ -246,6 +246,11 @@ if (isAdmin) {
 }
 
 async function init() {
+  if (currentUser && currentUser.role === 'agent') {
+    document.querySelector('#teamList').innerHTML =
+      '<p class="muted">Esta sección no está disponible para tu rol.</p>';
+    return;
+  }
   await loadTeams();
   await loadTeam();
 }
