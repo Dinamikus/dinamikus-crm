@@ -112,7 +112,7 @@ conversationsRouter.get('/:id/messages', async (req, res) => {
     }
 
     const messages = await pool.query(
-      `SELECT id, direction, message_type, body, created_at
+      `SELECT id, direction, message_type, body, media_key, media_mime_type, created_at
        FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC`,
       [req.params.id]
     );

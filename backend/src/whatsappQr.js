@@ -1,10 +1,11 @@
-import makeWASocket, { DisconnectReason, makeCacheableSignalKeyStore } from 'baileys';
+import makeWASocket, { DisconnectReason, makeCacheableSignalKeyStore, downloadMediaMessage } from 'baileys';
 import { Boom } from '@hapi/boom';
 import QRCode from 'qrcode';
 import pino from 'pino';
 import { pool } from './db.js';
 import { usePostgresAuthState, deletePostgresAuthState } from './whatsappQrAuthState.js';
 import { ingestInboundMessage, ingestOutboundMessageFromDevice } from './inboundMessage.js';
+import { uploadMedia, mediaConfigured, extensionForMime } from './mediaStorage.js';
 
 // Sesiones activas en memoria: channelId -> { sock, qrDataUrl, status }.
 // Vive mientras el proceso de Node esté corriendo — por eso reconnectAllOnBoot()
@@ -121,8 +122,31 @@ export async function startSession(channelId, tenantId, ownerUserId) {
       }
 
       const body = extractText(msg.message);
-      console.log(`[whatsapp_qr ${channelId}] texto extraido: ${JSON.stringify(body)}`);
+      const media = getMediaDetails(msg.message);
+      console.log(
+        `[whatsapp_qr ${channelId}] texto extraido: ${JSON.stringify(body)}${media ? ` | multimedia: ${media.messageType}` : ''}`
+      );
       if (!body) continue; // adjuntos sin texto: se omiten en esta primera versión
+
+      let mediaKey = null;
+      let mediaMimeType = null;
+      if (media && mediaConfigured()) {
+        try {
+          const buffer = await downloadMediaMessage(msg, 'buffer', {}, { logger, reuploadRequest: sock.updateMediaMessage });
+          mediaKey = await uploadMedia({
+            tenantId,
+            channelId,
+            messageExternalId: msg.key.id,
+            buffer,
+            mimeType: media.mimetype,
+            extension: media.extension
+          });
+          mediaMimeType = media.mimetype;
+          console.log(`[whatsapp_qr ${channelId}] archivo multimedia subido: ${mediaKey}`);
+        } catch (err) {
+          console.error(`[whatsapp_qr ${channelId}] error descargando/subiendo multimedia:`, err.message);
+        }
+      }
 
       const channelRow = await pool.query('SELECT external_id FROM channels WHERE id = $1', [
         channelId
@@ -137,8 +161,10 @@ export async function startSession(channelId, tenantId, ownerUserId) {
           channelId,
           candidateIds: [resolvedPhone, rawLid],
           externalMessageId: msg.key.id,
-          messageType: 'text',
+          messageType: media ? media.messageType : 'text',
           body,
+          mediaKey,
+          mediaMimeType,
           rawPayload: msg
         });
         console.log(`[whatsapp_qr ${channelId}] ingestOutboundMessageFromDevice resultado:`, outResult);
@@ -155,8 +181,10 @@ export async function startSession(channelId, tenantId, ownerUserId) {
           secondaryExternalId: resolvedPhone ? rawLid : undefined,
           contactName: msg.pushName || null,
           externalMessageId: msg.key.id,
-          messageType: 'text',
+          messageType: media ? media.messageType : 'text',
           body,
+          mediaKey,
+          mediaMimeType,
           rawPayload: msg
         });
         console.log(`[whatsapp_qr ${channelId}] ingestInboundMessage resultado:`, result);
@@ -226,4 +254,22 @@ function extractText(message) {
   if (message.locationMessage) return '[ubicación]';
   if (message.contactMessage) return '[contacto compartido]';
   return null;
+}
+
+// Detecta si el mensaje trae un archivo real (no solo texto) y qué se necesita
+// para descargarlo y guardarlo: el tipo (para mostrarlo bien en el inbox) y el mimetype.
+function getMediaDetails(message) {
+  const candidates = [
+    { obj: message.imageMessage, messageType: 'image' },
+    { obj: message.videoMessage, messageType: 'video' },
+    { obj: message.audioMessage, messageType: message.audioMessage && message.audioMessage.ptt ? 'ptt' : 'audio' },
+    { obj: message.documentMessage, messageType: 'document' },
+    { obj: message.stickerMessage, messageType: 'sticker' }
+  ];
+
+  const match = candidates.find((c) => c.obj);
+  if (!match) return null;
+
+  const mimetype = match.obj.mimetype || 'application/octet-stream';
+  return { messageType: match.messageType, mimetype, extension: extensionForMime(mimetype, match.obj.fileName) };
 }

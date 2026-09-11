@@ -26,6 +26,8 @@ export async function ingestInboundMessage({
   externalMessageId,
   messageType,
   body,
+  mediaKey,
+  mediaMimeType,
   rawPayload
 }) {
   const client = await pool.connect();
@@ -122,11 +124,21 @@ export async function ingestInboundMessage({
 
     await client.query(
       `INSERT INTO messages
-         (tenant_id, conversation_id, external_message_id, direction, sender_external_id, message_type, body, raw_payload)
-       VALUES ($1, $2, $3, 'inbound', $4, $5, $6, $7)
+         (tenant_id, conversation_id, external_message_id, direction, sender_external_id, message_type, body, media_key, media_mime_type, raw_payload)
+       VALUES ($1, $2, $3, 'inbound', $4, $5, $6, $7, $8, $9)
        ON CONFLICT (conversation_id, external_message_id) WHERE external_message_id IS NOT NULL
        DO NOTHING`,
-      [tenantId, conversationId, externalMessageId || null, fromId, messageType || 'text', body, safeJsonStringify(rawPayload || {})]
+      [
+        tenantId,
+        conversationId,
+        externalMessageId || null,
+        fromId,
+        messageType || 'text',
+        body,
+        mediaKey || null,
+        mediaMimeType || null,
+        safeJsonStringify(rawPayload || {})
+      ]
     );
 
     await client.query('COMMIT');
@@ -166,6 +178,8 @@ export async function ingestOutboundMessageFromDevice({
   externalMessageId,
   messageType,
   body,
+  mediaKey,
+  mediaMimeType,
   rawPayload
 }) {
   const client = await pool.connect();
@@ -213,11 +227,20 @@ export async function ingestOutboundMessageFromDevice({
 
     await client.query(
       `INSERT INTO messages
-         (tenant_id, conversation_id, external_message_id, direction, message_type, body, raw_payload)
-       VALUES ($1, $2, $3, 'outbound', $4, $5, $6)
+         (tenant_id, conversation_id, external_message_id, direction, message_type, body, media_key, media_mime_type, raw_payload)
+       VALUES ($1, $2, $3, 'outbound', $4, $5, $6, $7, $8)
        ON CONFLICT (conversation_id, external_message_id) WHERE external_message_id IS NOT NULL
        DO NOTHING`,
-      [tenantId, conversationId, externalMessageId || null, messageType || 'text', body, safeJsonStringify(rawPayload || {})]
+      [
+        tenantId,
+        conversationId,
+        externalMessageId || null,
+        messageType || 'text',
+        body,
+        mediaKey || null,
+        mediaMimeType || null,
+        safeJsonStringify(rawPayload || {})
+      ]
     );
     await client.query('UPDATE conversations SET updated_at = NOW() WHERE id = $1', [conversationId]);
 

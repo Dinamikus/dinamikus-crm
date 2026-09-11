@@ -236,8 +236,21 @@ A petición explícita: un `agent` ahora ve **solo lo suyo** en cada pantalla, s
 - **Equipo**: `GET /api/users` devuelve **403** para un `agent` — no puede ver el listado de compañeros ni aunque sea de solo lectura. `/team.html` le muestra un mensaje claro en vez de un error.
 - **Leads → Exportar CSV**: el botón ahora es exclusivo de `admin` (antes lo veía cualquier rol, aunque los datos ya estaban filtrados por rol).
 
-## Imágenes y audio en WhatsApp QR
-Antes, un mensaje de imagen, audio, video, documento, sticker o ubicación **sin texto/caption** se descartaba por completo — ni siquiera quedaba un rastro en el hilo. Ahora, igual que ya hacía WhatsApp Cloud API, queda una etiqueta legible (`[imagen]`, `[audio]`, `[audio de voz]`, `[documento]`, etc.) para que el mensaje no desaparezca del historial. Mostrar el archivo real (descargar y renderizar la imagen/audio) es un paso aparte, más grande, que queda pendiente si se quiere más adelante.
+## Imágenes, audio y documentos reales en el chat
+Antes, un mensaje de imagen/audio/video/documento sin texto se descartaba por completo (ni quedaba un rastro en el hilo), y luego se dejó al menos una etiqueta (`[imagen]`, `[audio]`, etc.). Ahora se descarga y se muestra el **archivo real** — imágenes se ven inline, audio se reproduce con controles, documentos y video traen enlace/reproductor — para los dos canales de WhatsApp (Cloud API oficial y QR).
+
+- **Almacenamiento**: bucket de Railway `crm-media` (S3-compatible), creado y conectado directamente al servicio `web` vía variables `MEDIA_*` (referencias al bucket, no hace falta copiarlas a mano). Los buckets de Railway son privados — nunca se expone una URL pública fija.
+- **`backend/src/mediaStorage.js`** — sube el archivo al bucket (`uploadMedia`) y genera enlaces temporales de 10 minutos para verlo (`getMediaUrl`), usando `@aws-sdk/client-s3` y `@aws-sdk/s3-request-presigner`.
+- **WhatsApp QR** (`whatsappQr.js`): usa `downloadMediaMessage` de Baileys (que descifra el archivo directo del CDN de WhatsApp) y lo sube al bucket.
+- **WhatsApp Cloud API** (`whatsapp.js`): pide la URL temporal del archivo a la Graph API de Meta con el `media_id`, la descarga, y la sube al bucket.
+- **`messages.media_key` / `messages.media_mime_type`** — nuevas columnas; `media_key` es la ruta dentro del bucket (nunca la URL directa, que expira o requiere firma).
+- **`GET /api/media/:messageId`** — el único punto de acceso a un archivo. Revisa que el mensaje sea del tenant del que pide, y respeta el mismo alcance por rol que el resto del sistema (agent: solo lo suyo; supervisor: su equipo; admin: todo) antes de generar el enlace temporal. Devuelve `{ url }` en JSON — no hace un redirect directo, porque el navegador no puede mandar el token de sesión en un `<img src>`; el frontend pide este endpoint primero (con el token) y luego usa el enlace que responde.
+- Si un mensaje sin texto no tiene `media_key` (por ejemplo, si `MEDIA_*` no estaba configurado cuando llegó, o si la descarga falló), sigue mostrando la etiqueta de respaldo (`[imagen]`, etc.) — nunca se pierde el mensaje del hilo.
+
+### Migraciones nuevas de esta fase
+```
+psql "$DATABASE_URL" -f sql/migrations/011_add_message_media.sql
+```
 
 ## Próximas fases
 1. ~~Autenticación real y roles.~~ ✅
@@ -255,8 +268,9 @@ Antes, un mensaje de imagen, audio, video, documento, sticker o ubicación **sin
 13. ~~Vista de Leads con exportar CSV e importar Excel/CSV.~~ ✅
 14. ~~Pipeline (tablero kanban de leads por estado).~~ ✅
 15. ~~Equipos: aislar a cada supervisor a solo los asesores de su propio equipo.~~ ✅
-16. Automatizaciones futuras: horario de atención, respuestas por palabra clave, seguimiento automático a leads sin respuesta.
-17. Historial de cambios de estado (para que los reportes reflejen el estado que tenía el lead en cada fecha, no solo el actual).
-18. Plantillas y seguimiento de WhatsApp.
-19. Facturación SaaS.
-20. Auditoría, rate limits y observabilidad.
+16. ~~Imágenes, audio y documentos reales en el chat (WhatsApp QR y Cloud API), con almacenamiento en bucket de Railway.~~ ✅
+17. Automatizaciones futuras: horario de atención, respuestas por palabra clave, seguimiento automático a leads sin respuesta.
+18. Historial de cambios de estado (para que los reportes reflejen el estado que tenía el lead en cada fecha, no solo el actual).
+19. Plantillas y seguimiento de WhatsApp.
+20. Facturación SaaS.
+21. Auditoría, rate limits y observabilidad.

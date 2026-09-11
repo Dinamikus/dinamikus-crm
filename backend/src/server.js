@@ -22,6 +22,7 @@ import { whatsappQrRouter } from './whatsappQrRoutes.js';
 import { sendQrMessage, reconnectAllOnBoot } from './whatsappQr.js';
 import { safeJsonStringify } from './jsonUtils.js';
 import { getTeamAgentIds } from './teamScope.js';
+import { getMediaUrl } from './mediaStorage.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -88,6 +89,42 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
       totalLeads: total.rows[0].count,
       openLeads: open.rows[0].count
     });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/media/:messageId — enlace temporal (10 min) para ver/descargar el
+// archivo de un mensaje. Nunca se expone el bucket directamente; cada vista
+// genera un enlace nuevo bajo demanda, y respeta el mismo alcance por rol que
+// el resto del sistema (agent: solo lo suyo; supervisor: su equipo; admin: todo).
+app.get('/api/media/:messageId', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT m.media_key, l.assigned_user_id
+       FROM messages m
+       JOIN conversations c ON c.id = m.conversation_id
+       JOIN leads l ON l.id = c.lead_id
+       WHERE m.id = $1 AND m.tenant_id = $2`,
+      [req.params.messageId, req.user.tenantId]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Media not found' });
+
+    const { media_key: mediaKey, assigned_user_id: assignedTo } = result.rows[0];
+    if (!mediaKey) return res.status(404).json({ error: 'This message has no media' });
+
+    const { role, id: userId, tenantId } = req.user;
+    if (role === 'agent' && assignedTo !== userId) {
+      return res.status(404).json({ error: 'Media not found' });
+    }
+    if (role === 'supervisor') {
+      const teamAgentIds = await getTeamAgentIds(tenantId, userId);
+      const inScope = assignedTo === null || teamAgentIds.includes(assignedTo);
+      if (!inScope) return res.status(404).json({ error: 'Media not found' });
+    }
+
+    const url = await getMediaUrl(mediaKey);
+    res.json({ url });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

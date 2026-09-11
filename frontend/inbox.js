@@ -42,6 +42,38 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+// Pide el enlace temporal de cada archivo del hilo (imagen, audio, documento…) y
+// lo inserta donde corresponda. Va por separado del texto porque el navegador no
+// puede mandar el token de sesión directo en un <img src>, así que primero se
+// pide con authFetch (que sí lo manda) y luego se usa el enlace que responde.
+async function loadMediaSlots() {
+  const slots = document.querySelectorAll('.media-slot');
+  for (const slot of slots) {
+    const messageId = slot.dataset.messageId;
+    const type = slot.dataset.mediaType;
+    try {
+      const r = await authFetch(`/api/media/${messageId}`);
+      if (!r.ok) {
+        slot.innerHTML = '<span class="muted" style="font-size:12px">No se pudo cargar el archivo.</span>';
+        continue;
+      }
+      const { url } = await r.json();
+
+      if (type === 'image' || type === 'sticker') {
+        slot.innerHTML = `<img src="${url}" style="max-width:240px;border-radius:10px;display:block;margin-bottom:6px" alt="Imagen">`;
+      } else if (type === 'video') {
+        slot.innerHTML = `<video src="${url}" controls style="max-width:240px;border-radius:10px;display:block;margin-bottom:6px"></video>`;
+      } else if (type === 'audio' || type === 'ptt') {
+        slot.innerHTML = `<audio src="${url}" controls style="display:block;margin-bottom:6px"></audio>`;
+      } else {
+        slot.innerHTML = `<a href="${url}" target="_blank" rel="noopener" style="display:block;margin-bottom:6px;color:#2563eb;font-weight:700">📎 Descargar archivo</a>`;
+      }
+    } catch {
+      slot.innerHTML = '<span class="muted" style="font-size:12px">Error al cargar el archivo.</span>';
+    }
+  }
+}
+
 function currentFilters() {
   const channelId = document.querySelector('#filterChannel').value;
   const assignee = document.querySelector('#filterAssignee').value;
@@ -179,14 +211,20 @@ async function renderThread(id) {
       ? `<select id="leadAssignee"><option value="">Sin asignar</option>${users.map((u) => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('')}</select>`
       : '';
 
+    const MEDIA_TYPES = ['image', 'video', 'audio', 'ptt', 'document', 'sticker'];
     const messagesHtml = messages
-      .map(
-        (m) => `
+      .map((m) => {
+        const isMedia = m.media_key && MEDIA_TYPES.includes(m.message_type);
+        const mediaPlaceholder = isMedia
+          ? `<div class="media-slot" data-message-id="${m.id}" data-media-type="${m.message_type}"><span class="muted" style="font-size:12px">Cargando…</span></div>`
+          : '';
+        return `
         <div class="bubble ${m.direction}">
+          ${mediaPlaceholder}
           ${escapeHtml(m.body || `[${m.message_type}]`)}
           <time>${new Date(m.created_at).toLocaleString('es-SV', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}</time>
-        </div>`
-      )
+        </div>`;
+      })
       .join('');
 
     thread.innerHTML = `
@@ -213,6 +251,7 @@ async function renderThread(id) {
     `;
 
     document.querySelector('#threadBackBtn').addEventListener('click', backToList);
+    loadMediaSlots();
 
     const threadMessages = document.querySelector('#threadMessages');
     threadMessages.scrollTop = threadMessages.scrollHeight;

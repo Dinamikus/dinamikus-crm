@@ -111,6 +111,10 @@ CREATE TABLE IF NOT EXISTS messages (
   sender_external_id TEXT,
   message_type TEXT,
   body TEXT,
+  -- Referencia al archivo en el bucket de almacenamiento (no la URL directa, que
+  -- expira o no es de acceso público) — NULL para mensajes de solo texto.
+  media_key TEXT,
+  media_mime_type TEXT,
   raw_payload JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
