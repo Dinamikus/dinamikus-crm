@@ -14,14 +14,17 @@ document.querySelector('#logoutLink').addEventListener('click', (e) => {
   logout();
 });
 
-const STATUS_LABELS = {
-  new: 'Nuevo',
-  contacted: 'En conversación',
-  follow_up: 'Recontacto',
-  appointment: 'Cita',
-  won: 'Cierre',
-  not_interested: 'No le interesa'
-};
+let STATUS_LABELS = {};
+
+async function loadStatusLabels() {
+  try {
+    const r = await authFetch('/api/pipeline-stages');
+    const stages = await r.json();
+    STATUS_LABELS = Object.fromEntries(stages.map((s) => [s.key, s.label]));
+  } catch {
+    STATUS_LABELS = {};
+  }
+}
 
 let allLeads = [];
 let parsedImportRows = [];
@@ -220,5 +223,9 @@ async function initImport() {
   });
 }
 
-loadLeads();
-initImport();
+async function init() {
+  await loadStatusLabels();
+  await loadLeads();
+  initImport();
+}
+init();

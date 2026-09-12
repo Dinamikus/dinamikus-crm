@@ -2,6 +2,7 @@ import { pool } from './db.js';
 import { autoAssignLead } from './assignment.js';
 import { maybeSendWelcomeMessage } from './automations.js';
 import { safeJsonStringify } from './jsonUtils.js';
+import { getDefaultStageKey } from './leadsRoutes.js';
 
 // Punto único de "qué pasa cuando llega un mensaje" para cualquier canal (WhatsApp
 // Cloud API, Instagram, o WhatsApp por QR). Aquí vive la regla que evita duplicados:
@@ -36,6 +37,7 @@ export async function ingestInboundMessage({
   try {
     await client.query('BEGIN');
 
+    const defaultStage = await getDefaultStageKey(tenantId);
     let leadResult;
     if (identifyBy === 'phone') {
       const extId = secondaryExternalId || fromId;
@@ -62,24 +64,24 @@ export async function ingestInboundMessage({
       if (!leadResult) {
         leadResult = await client.query(
           `INSERT INTO leads (tenant_id, channel_id, name, phone, external_user_id, source, status)
-           VALUES ($1, $2, $3, $4, $5, $6, 'new')
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
            ON CONFLICT (tenant_id, phone) WHERE phone IS NOT NULL
            DO UPDATE SET
              name = COALESCE(leads.name, EXCLUDED.name),
              external_user_id = COALESCE(EXCLUDED.external_user_id, leads.external_user_id),
              updated_at = NOW()
            RETURNING id, (xmax = 0) AS is_new`,
-          [tenantId, channelId, contactName, fromId, extId, channelType]
+          [tenantId, channelId, contactName, fromId, extId, channelType, defaultStage]
         );
       }
     } else {
       leadResult = await client.query(
         `INSERT INTO leads (tenant_id, channel_id, name, external_user_id, source, status)
-         VALUES ($1, $2, $3, $4, $5, 'new')
+         VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (tenant_id, channel_id, external_user_id) WHERE external_user_id IS NOT NULL AND phone IS NULL
          DO UPDATE SET name = COALESCE(leads.name, EXCLUDED.name), updated_at = NOW()
          RETURNING id, (xmax = 0) AS is_new`,
-        [tenantId, channelId, contactName, fromId, channelType]
+        [tenantId, channelId, contactName, fromId, channelType, defaultStage]
       );
     }
     const leadId = leadResult.rows[0].id;

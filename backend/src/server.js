@@ -23,6 +23,7 @@ import { sendQrMessage, reconnectAllOnBoot } from './whatsappQr.js';
 import { safeJsonStringify } from './jsonUtils.js';
 import { getTeamAgentIds } from './teamScope.js';
 import { getMediaUrl } from './mediaStorage.js';
+import { pipelineStagesRouter } from './pipelineStagesRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,6 +51,7 @@ app.use('/api/tenant', tenantRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/teams', teamsRouter);
 app.use('/api/platform', platformRouter);
+app.use('/api/pipeline-stages', pipelineStagesRouter);
 app.use('/api/channels/whatsapp-qr', whatsappQrRouter);
 
 // Config pública (no-secreta) que el frontend necesita para iniciar el SDK de Facebook.
@@ -81,8 +83,14 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
       `SELECT COUNT(*)::int AS count FROM leads WHERE tenant_id = $1 ${scopeFilter}`,
       params
     );
+    // "Abierto" = el lead está en una etapa que el negocio NO marcó como cerrada
+    // (cada negocio define sus propias etapas y cuáles son de cierre).
     const open = await pool.query(
-      `SELECT COUNT(*)::int AS count FROM leads WHERE tenant_id = $1 AND status IN ('new','contacted','follow_up') ${scopeFilter}`,
+      `SELECT COUNT(*)::int AS count FROM leads
+       WHERE tenant_id = $1 ${scopeFilter}
+       AND status NOT IN (
+         SELECT key FROM pipeline_stages WHERE tenant_id = $1 AND is_closed = true
+       )`,
       params
     );
     res.json({

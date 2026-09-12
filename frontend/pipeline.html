@@ -34,7 +34,19 @@
         <h1>Pipeline</h1>
         <p class="muted" id="pipelineHint">Arrastra un lead entre columnas para cambiar su estado.</p>
       </div>
+      <button id="manageStagesBtn" style="display:none;padding:9px 16px;border:1px solid #d0d5dd;border-radius:8px;background:white;cursor:pointer;font-size:13px;font-weight:700">Configurar etapas</button>
     </header>
+
+    <div class="card" id="stagesCard" style="display:none;margin-bottom:20px">
+      <h3>Etapas de tu pipeline</h3>
+      <p class="muted">Personaliza el embudo de ventas de tu negocio — renombra, reordena, marca cuáles son de cierre, o agrega las que necesites.</p>
+      <div id="stagesList" style="margin:14px 0"></div>
+      <form id="createStageForm" style="display:flex;gap:8px">
+        <input type="text" name="label" placeholder="Nombre de la nueva etapa (ej. Negociación)" required style="flex:1;padding:10px;border:1px solid #d0d5dd;border-radius:8px">
+        <button type="submit" class="primary">Agregar etapa</button>
+      </form>
+      <div id="stageError" class="auth-error" style="margin-top:12px"></div>
+    </div>
 
     <div id="kanban" class="kanban">
       <p class="muted">Cargando…</p>

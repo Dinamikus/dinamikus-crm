@@ -252,6 +252,21 @@ Antes, un mensaje de imagen/audio/video/documento sin texto se descartaba por co
 psql "$DATABASE_URL" -f sql/migrations/011_add_message_media.sql
 ```
 
+## Etapas del pipeline personalizables por negocio
+Cada negocio (tenant) tiene su propio embudo de ventas, totalmente independiente del de cualquier otro — antes las 6 etapas (Nuevo, En conversación, Recontacto, Cita, Cierre, No le interesa) estaban fijas en el código, iguales para todos.
+
+- **`pipeline_stages`** — una fila por etapa, por negocio: `key` (identificador interno, se genera solo a partir del nombre), `label` (lo que se ve, editable), `position` (orden), `is_default` (la etapa donde arranca un lead nuevo — debe haber exactamente una), `is_closed` (etapas de cierre, como "Cierre" o "No le interesa" — no cuentan como carga de trabajo activa para el reparto automático, ni como "lead abierto" en el Dashboard).
+- **Negocios nuevos** (creados desde Plataforma) arrancan automáticamente con las mismas 6 etapas de siempre — el admin las puede renombrar, reordenar, agregar más, o borrar las que no use.
+- **Negocios que ya existían** antes de esta fase: la migración `012_add_pipeline_stages.sql` les siembra esas mismas 6 etapas automáticamente, sin tocar nada de sus leads existentes.
+- **`GET/POST/PATCH/DELETE /api/pipeline-stages`** — gestión completa (solo `admin`). Reordenar es con `{"move": "up"}` / `{"move": "down"}` (intercambia posición con el vecino). Borrar una etapa se bloquea si tiene leads adentro (hay que moverlos primero), si es la última etapa que queda, o si es la etapa "por defecto" (hay que marcar otra como inicial primero).
+- **Todo lo que antes tenía las 6 etapas fijas en el código ahora es dinámico**: validación de estado al mover un lead (`leadsRoutes.js`), la etapa en la que arranca un lead nuevo — manual, importado, o por mensaje entrante (`leadsRoutes.js`, `inboundMessage.js`), el reparto automático excluyendo etapas cerradas (`assignment.js`), "leads abiertos" del Dashboard (`server.js`), y las columnas de los Reportes por asesor (`reportsRoutes.js` — ahora cada negocio ve sus propias columnas en el reporte, no una lista fija).
+- Frontend: panel "Configurar etapas" dentro de `/pipeline.html` (solo admin) — ahí se gestiona todo. Leads, Inbox, Dashboard y Reportes ya muestran las etiquetas y columnas reales del negocio, no un mapa fijo.
+
+### Migración nueva de esta fase
+```
+psql "$DATABASE_URL" -f sql/migrations/012_add_pipeline_stages.sql
+```
+
 ## Próximas fases
 1. ~~Autenticación real y roles.~~ ✅
 2. ~~Alta de empresas/tenants.~~ ✅
@@ -269,8 +284,9 @@ psql "$DATABASE_URL" -f sql/migrations/011_add_message_media.sql
 14. ~~Pipeline (tablero kanban de leads por estado).~~ ✅
 15. ~~Equipos: aislar a cada supervisor a solo los asesores de su propio equipo.~~ ✅
 16. ~~Imágenes, audio y documentos reales en el chat (WhatsApp QR y Cloud API), con almacenamiento en bucket de Railway.~~ ✅
-17. Automatizaciones futuras: horario de atención, respuestas por palabra clave, seguimiento automático a leads sin respuesta.
-18. Historial de cambios de estado (para que los reportes reflejen el estado que tenía el lead en cada fecha, no solo el actual).
-19. Plantillas y seguimiento de WhatsApp.
-20. Facturación SaaS.
-21. Auditoría, rate limits y observabilidad.
+17. ~~Etapas del pipeline personalizables por negocio (renombrar, reordenar, agregar, borrar).~~ ✅
+18. Automatizaciones futuras: horario de atención, respuestas por palabra clave, seguimiento automático a leads sin respuesta.
+19. Historial de cambios de estado (para que los reportes reflejen el estado que tenía el lead en cada fecha, no solo el actual).
+20. Plantillas y seguimiento de WhatsApp.
+21. Facturación SaaS.
+22. Auditoría, rate limits y observabilidad.

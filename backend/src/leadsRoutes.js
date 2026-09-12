@@ -6,8 +6,6 @@ import { getTeamAgentIds } from './teamScope.js';
 export const leadsRouter = Router();
 leadsRouter.use(requireAuth);
 
-const ALLOWED_STATUSES = ['new', 'contacted', 'follow_up', 'appointment', 'won', 'not_interested'];
-
 // Modelo de permisos por rol:
 // - admin: ve y edita todo (estado, notas, asignación) sin restricción.
 // - supervisor: ve los leads de los asesores de SU equipo (más los sin asignar,
@@ -71,8 +69,14 @@ leadsRouter.patch('/:id', async (req, res) => {
   const assignedUserId = touchesAssignment ? req.body.assignedUserId : undefined;
   const { role } = req.user;
 
-  if (status && !ALLOWED_STATUSES.includes(status)) {
-    return res.status(400).json({ error: `status must be one of: ${ALLOWED_STATUSES.join(', ')}` });
+  if (status) {
+    const validStage = await pool.query(
+      'SELECT 1 FROM pipeline_stages WHERE tenant_id = $1 AND key = $2',
+      [req.user.tenantId, status]
+    );
+    if (validStage.rowCount === 0) {
+      return res.status(400).json({ error: `"${status}" no es una etapa válida de tu pipeline` });
+    }
   }
 
   if (role === 'agent' && touchesAssignment) {
@@ -173,11 +177,19 @@ leadsRouter.post('/', async (req, res) => {
   }
 
   try {
+    const defaultStage = await getDefaultStageKey(req.user.tenantId);
     const result = await pool.query(
       `INSERT INTO leads (tenant_id, name, phone, source, status, notes, assigned_user_id)
-       VALUES ($1, $2, $3, 'manual', 'new', $4, $5)
+       VALUES ($1, $2, $3, 'manual', $4, $5, $6)
        RETURNING id, name, phone, source, status, assigned_user_id, created_at`,
-      [req.user.tenantId, name ? String(name).trim().slice(0, 200) : null, phone, notes || null, finalAssignee]
+      [
+        req.user.tenantId,
+        name ? String(name).trim().slice(0, 200) : null,
+        phone,
+        defaultStage,
+        notes || null,
+        finalAssignee
+      ]
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -213,6 +225,7 @@ leadsRouter.post('/import', requireRole('admin'), async (req, res) => {
   }
 
   const sourceLabel = (source && String(source).trim()) || 'import';
+  const defaultStage = await getDefaultStageKey(req.user.tenantId);
   let imported = 0;
   let skippedDuplicate = 0;
   let skippedInvalid = 0;
@@ -230,10 +243,10 @@ leadsRouter.post('/import', requireRole('admin'), async (req, res) => {
 
       const result = await pool.query(
         `INSERT INTO leads (tenant_id, name, phone, source, status, assigned_user_id)
-         VALUES ($1, $2, $3, $4, 'new', $5)
+         VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (tenant_id, phone) WHERE phone IS NOT NULL DO NOTHING
          RETURNING id`,
-        [req.user.tenantId, name, phone, sourceLabel, assignedUserId || null]
+        [req.user.tenantId, name, phone, sourceLabel, defaultStage, assignedUserId || null]
       );
 
       if (result.rowCount > 0) imported++;
@@ -254,4 +267,16 @@ function normalizePhone(raw) {
   const digits = String(raw).replace(/[^\d]/g, '');
   if (digits.length < 8 || digits.length > 15) return null;
   return digits;
+}
+
+// La etapa en la que arranca cualquier lead nuevo de este negocio — cada tenant
+// tiene la suya (personalizable). Si por algún motivo ninguna está marcada como
+// "por defecto" (no debería pasar), cae a la primera etapa en orden.
+export async function getDefaultStageKey(tenantId) {
+  const result = await pool.query(
+    `SELECT key FROM pipeline_stages WHERE tenant_id = $1
+     ORDER BY is_default DESC, position ASC LIMIT 1`,
+    [tenantId]
+  );
+  return result.rows[0] ? result.rows[0].key : 'new';
 }

@@ -10,15 +10,6 @@ document.querySelector('#logoutLink').addEventListener('click', (e) => {
   logout();
 });
 
-const STATUS_LABELS = {
-  new: 'Nuevo',
-  contacted: 'En conversación',
-  follow_up: 'Recontacto',
-  appointment: 'Cita',
-  won: 'Cierre',
-  not_interested: 'No le interesa'
-};
-
 function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str ?? '';
@@ -53,13 +44,14 @@ async function loadChannelsStat() {
 async function loadPipelinePreview() {
   const container = document.querySelector('#pipelinePreview');
   try {
-    const r = await authFetch('/api/leads');
-    const leads = await r.json();
+    const [stagesRes, leadsRes] = await Promise.all([authFetch('/api/pipeline-stages'), authFetch('/api/leads')]);
+    const stages = await stagesRes.json();
+    const leads = await leadsRes.json();
 
-    container.innerHTML = Object.entries(STATUS_LABELS)
-      .map(([key, label]) => {
-        const count = leads.filter((l) => l.status === key).length;
-        return `<div><h3>${label} <span>${count}</span></h3></div>`;
+    container.innerHTML = stages
+      .map((s) => {
+        const count = leads.filter((l) => l.status === s.key).length;
+        return `<div><h3>${escapeHtml(s.label)} <span>${count}</span></h3></div>`;
       })
       .join('');
   } catch {

@@ -11,7 +11,8 @@ export async function autoAssignLead(client, tenantId, leadId) {
   const candidate = await client.query(
     `SELECT u.id
      FROM users u
-     LEFT JOIN leads l ON l.assigned_user_id = u.id AND l.status NOT IN ('won','not_interested')
+     LEFT JOIN leads l ON l.assigned_user_id = u.id
+       AND l.status NOT IN (SELECT key FROM pipeline_stages WHERE tenant_id = $1 AND is_closed = true)
      WHERE u.tenant_id = $1 AND u.is_active = true AND u.role != 'supervisor'
      GROUP BY u.id
      ORDER BY COUNT(l.id) ASC, u.created_at ASC

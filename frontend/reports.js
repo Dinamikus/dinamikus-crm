@@ -34,17 +34,24 @@ function daysAgoISO(n) {
   return d.toISOString().slice(0, 10);
 }
 
-function renderRow(name, row, extraClass) {
+// Las columnas de etapa son las de ESTE negocio (personalizables) — se arma el
+// encabezado de la tabla dinámicamente según lo que responda la API.
+function renderHeader(stages) {
+  const headerRow = document.querySelector('#reportHeaderRow');
+  const fixedHeaders = '<th>Asesor</th><th>Recibidos</th><th>En conversación</th><th>Sin respuesta</th>';
+  const stageHeaders = stages.map((s) => `<th>${escapeHtml(s.label)}</th>`).join('');
+  headerRow.innerHTML = fixedHeaders + stageHeaders;
+}
+
+function renderRow(name, row, stages, extraClass) {
+  const stageCells = stages.map((s) => `<td>${row.by_stage[s.key] || 0}</td>`).join('');
   return `
     <tr class="${extraClass || ''}">
       <td>${escapeHtml(name)}</td>
       <td>${row.recibidos}</td>
       <td>${row.en_conversacion}</td>
       <td>${row.sin_respuesta}</td>
-      <td>${row.recontacto}</td>
-      <td>${row.citas}</td>
-      <td>${row.cierres}</td>
-      <td>${row.no_le_interesa}</td>
+      ${stageCells}
     </tr>`;
 }
 
@@ -69,26 +76,37 @@ async function loadReport() {
     }
     status.textContent = '';
 
+    const stages = data.stages || [];
+    renderHeader(stages);
+    const colspan = 4 + stages.length;
+
     if (data.advisors.length === 0 && Number(data.unassigned.recibidos) === 0) {
-      tbody.innerHTML = '<tr><td colspan="8" class="muted">No hay leads en ese rango de fechas.</td></tr>';
+      tbody.innerHTML = `<tr><td colspan="${colspan}" class="muted">No hay leads en ese rango de fechas.</td></tr>`;
       return;
     }
 
-    const totals = { recibidos: 0, en_conversacion: 0, sin_respuesta: 0, recontacto: 0, citas: 0, cierres: 0, no_le_interesa: 0 };
+    const totals = { recibidos: 0, en_conversacion: 0, sin_respuesta: 0, by_stage: {} };
+    stages.forEach((s) => { totals.by_stage[s.key] = 0; });
     let rowsHtml = '';
 
     data.advisors.forEach((a) => {
-      Object.keys(totals).forEach((k) => { totals[k] += Number(a[k]); });
+      totals.recibidos += Number(a.recibidos);
+      totals.en_conversacion += Number(a.en_conversacion);
+      totals.sin_respuesta += Number(a.sin_respuesta);
+      stages.forEach((s) => { totals.by_stage[s.key] += Number(a.by_stage[s.key] || 0); });
       const label = a.is_active ? a.advisor_name : `${a.advisor_name} (inactivo)`;
-      rowsHtml += renderRow(label, a, a.is_active ? '' : 'inactive-row');
+      rowsHtml += renderRow(label, a, stages, a.is_active ? '' : 'inactive-row');
     });
 
     if (Number(data.unassigned.recibidos) > 0) {
-      Object.keys(totals).forEach((k) => { totals[k] += Number(data.unassigned[k]); });
-      rowsHtml += renderRow('Sin asignar', data.unassigned);
+      totals.recibidos += Number(data.unassigned.recibidos);
+      totals.en_conversacion += Number(data.unassigned.en_conversacion);
+      totals.sin_respuesta += Number(data.unassigned.sin_respuesta);
+      stages.forEach((s) => { totals.by_stage[s.key] += Number(data.unassigned.by_stage[s.key] || 0); });
+      rowsHtml += renderRow('Sin asignar', data.unassigned, stages);
     }
 
-    rowsHtml += renderRow('Total', totals, 'totals-row');
+    rowsHtml += renderRow('Total', totals, stages, 'totals-row');
     tbody.innerHTML = rowsHtml;
   } catch {
     status.textContent = 'Error de conexión al cargar el reporte.';

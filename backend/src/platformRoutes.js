@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool } from './db.js';
 import { requireAuth, requirePlatformAdmin, hashPassword } from './auth.js';
+import { seedDefaultPipelineStages } from './pipelineStagesSeed.js';
 
 export const platformRouter = Router();
 platformRouter.use(requireAuth, requirePlatformAdmin);
@@ -69,6 +70,8 @@ platformRouter.post('/tenants', async (req, res) => {
       [tenant.id, adminName, email.toLowerCase(), passwordHash]
     );
     const user = userResult.rows[0];
+
+    await seedDefaultPipelineStages(client, tenant.id);
 
     await client.query('COMMIT');
     res.status(201).json({ tenant, admin: user });

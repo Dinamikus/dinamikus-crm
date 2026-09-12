@@ -91,6 +91,27 @@ CREATE TABLE IF NOT EXISTS leads (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Etapas del embudo de ventas (pipeline), personalizables por negocio — cada
+-- tenant tiene las suyas, distintas a las de cualquier otro. "leads.status"
+-- guarda la "key" de la etapa (texto libre, no una lista fija en la base de datos).
+CREATE TABLE IF NOT EXISTS pipeline_stages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  key TEXT NOT NULL,
+  label TEXT NOT NULL,
+  position INT NOT NULL DEFAULT 0,
+  -- La etapa en la que arranca un lead nuevo (debe haber exactamente una marcada así).
+  is_default BOOLEAN NOT NULL DEFAULT false,
+  -- Etapas "cerradas" (ej. Cierre, No le interesa): no cuentan como carga de
+  -- trabajo activa de un asesor para el reparto automático, y no se consideran
+  -- "leads abiertos" en el dashboard.
+  is_closed BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (tenant_id, key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pipeline_stages_tenant ON pipeline_stages(tenant_id, position);
+
 CREATE TABLE IF NOT EXISTS conversations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,

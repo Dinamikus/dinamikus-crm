@@ -21,14 +21,17 @@ document.querySelector('#logoutLink').addEventListener('click', (e) => {
   logout();
 });
 
-const STATUS_LABELS = {
-  new: 'Nuevo',
-  contacted: 'En conversación',
-  follow_up: 'Recontacto',
-  appointment: 'Cita',
-  won: 'Cierre',
-  not_interested: 'No le interesa'
-};
+let STATUS_LABELS = {};
+
+async function loadStatusLabels() {
+  try {
+    const r = await authFetch('/api/pipeline-stages');
+    const stages = await r.json();
+    STATUS_LABELS = Object.fromEntries(stages.map((s) => [s.key, s.label]));
+  } catch {
+    STATUS_LABELS = {};
+  }
+}
 
 let conversations = [];
 let channels = [];
@@ -323,6 +326,7 @@ async function renderThread(id) {
 }
 
 async function init() {
+  await loadStatusLabels();
   await loadFilterOptions();
   await loadAutoAssignSetting();
   await loadConversations();
