@@ -252,6 +252,13 @@ Antes, un mensaje de imagen/audio/video/documento sin texto se descartaba por co
 psql "$DATABASE_URL" -f sql/migrations/011_add_message_media.sql
 ```
 
+## Caché de Cloudflare — sello de versión en archivos estáticos
+Se detectó que Cloudflare (con el proxy en naranja sobre `crm.dinamikus.com`) puede quedarse sirviendo una copia **muy** vieja de un archivo `.js` o `.css` incluso después de "Purge Everything" — pasó con `pipeline.js`, que seguía sirviendo una versión de hace varias fases atrás.
+
+- Todos los `<script src="...">` y `<link rel="stylesheet">` de cada página ahora llevan un sello de versión (`?v=20260912a`) — Cloudflare y el navegador tratan cada versión como un archivo distinto, así que un deploy nuevo con un sello nuevo nunca puede chocar con una copia vieja en caché.
+- El servidor (`server.js`) ahora manda `Cache-Control: no-cache, must-revalidate` en `.html`, `.js` y `.css` — pide que siempre se revalide contra el origen antes de reusar una copia, en vez de guardarla "a ciegas" por un tiempo largo.
+- **Importante para el futuro**: si subes un cambio de frontend y no se refleja en `crm.dinamikus.com` (pero sí en la URL de Railway), lo más probable es que haga falta subir el número de versión (`?v=...`) en los archivos `.html` — avísame en cualquier momento y lo actualizo.
+
 ## Etapas del pipeline personalizables por negocio
 Cada negocio (tenant) tiene su propio embudo de ventas, totalmente independiente del de cualquier otro — antes las 6 etapas (Nuevo, En conversación, Recontacto, Cita, Cierre, No le interesa) estaban fijas en el código, iguales para todos.
 

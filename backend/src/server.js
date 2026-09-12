@@ -30,7 +30,20 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 app.use(express.json({ limit: '2mb' }));
-app.use(express.static(path.join(__dirname, '../../frontend')));
+app.use(
+  express.static(path.join(__dirname, '../../frontend'), {
+    setHeaders: (res, filePath) => {
+      // Los archivos .html, .js y .css se piden siempre con un sello de versión
+      // (?v=...) que cambia en cada actualización — así, un "no-cache" aquí no
+      // afecta el rendimiento normal, pero evita que Cloudflare (o el navegador)
+      // se quede pegado sirviendo una copia vieja después de un deploy nuevo,
+      // como pasó antes de agregar esto.
+      if (/\.(html|js|css)$/.test(filePath)) {
+        res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+      }
+    }
+  })
+);
 
 // Health check
 app.get('/api/health', async (_req, res) => {
