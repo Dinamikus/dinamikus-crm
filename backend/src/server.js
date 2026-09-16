@@ -20,10 +20,12 @@ import { processInboundInstagramWebhook } from './instagram.js';
 import { decryptSecret } from './crypto.js';
 import { whatsappQrRouter } from './whatsappQrRoutes.js';
 import { sendQrMessage, reconnectAllOnBoot } from './whatsappQr.js';
+import { procesarRecordatorios } from './botEngine.js';
 import { safeJsonStringify } from './jsonUtils.js';
 import { getTeamAgentIds } from './teamScope.js';
 import { getMediaUrl } from './mediaStorage.js';
 import { pipelineStagesRouter } from './pipelineStagesRoutes.js';
+import { botRouter } from './botRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -65,6 +67,7 @@ app.use('/api/reports', reportsRouter);
 app.use('/api/teams', teamsRouter);
 app.use('/api/platform', platformRouter);
 app.use('/api/pipeline-stages', pipelineStagesRouter);
+app.use('/api/bot', botRouter);
 app.use('/api/channels/whatsapp-qr', whatsappQrRouter);
 
 // Config pública (no-secreta) que el frontend necesita para iniciar el SDK de Facebook.
@@ -303,3 +306,11 @@ app.listen(port, '0.0.0.0', () => console.log(`CRM SaaS running on port ${port}`
 // Reconecta solas las sesiones de WhatsApp QR que ya habían sido escaneadas antes
 // de este arranque (redeploy, reinicio, etc.) — usa las credenciales guardadas en Postgres.
 reconnectAllOnBoot().catch((err) => console.error('Error reconectando sesiones WhatsApp QR:', err.message));
+
+// Cron de seguimiento del bot de citas: recordatorios 24h/2h antes y recontacto
+// tras no-show. Corre cada 15 min; cada consulta interna ya filtra por negocio
+// según lo que tenga configurado en bot_config, así que es seguro para todos
+// los tenants a la vez, activen o no el bot.
+setInterval(() => {
+  procesarRecordatorios().catch((err) => console.error('[bot] Error en cron de recordatorios:', err.message));
+}, 15 * 60 * 1000);

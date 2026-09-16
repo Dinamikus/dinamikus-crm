@@ -1,6 +1,7 @@
 import { pool } from './db.js';
 import { autoAssignLead } from './assignment.js';
 import { maybeSendWelcomeMessage } from './automations.js';
+import { procesarMensajeBot } from './botEngine.js';
 import { safeJsonStringify } from './jsonUtils.js';
 import { getDefaultStageKey } from './leadsRoutes.js';
 
@@ -157,6 +158,19 @@ export async function ingestInboundMessage({
         recipientPhone: identifyBy === 'phone' ? fromId : undefined,
         recipientIgsid: identifyBy === 'external_user_id' ? fromId : undefined
       });
+    }
+
+    // El bot de citas corre en cada mensaje (no solo el primero), y con el
+    // mismo criterio que la bienvenida: solo en canales del negocio, nunca en
+    // el celular personal de un asesor. No hace nada si el negocio no tiene
+    // el bot activado (lo revisa procesarMensajeBot internamente).
+    if (conversationIdForWelcome && !channelOwnerUserId) {
+      procesarMensajeBot({
+        tenantId,
+        conversationId: conversationIdForWelcome,
+        leadId,
+        mensajeTexto: body
+      }).catch((error) => console.error('[bot] Error procesando mensaje:', error.message));
     }
 
     return { leadId, conversationId, isNewLead };

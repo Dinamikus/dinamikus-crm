@@ -17,19 +17,29 @@ function blockSupervisors(req, res, next) {
 
 // POST /api/channels/whatsapp-qr/start — cualquier asesor conecta SU PROPIO WhatsApp.
 // A diferencia de los demás canales, esto no requiere ser admin: cada quien conecta el suyo.
+// Excepción: asNegocio=true crea un canal SIN dueño individual (owner_user_id null) —
+// el número general del negocio, el único tipo de canal que el bot automatizado usa.
+// Solo el admin puede crear este tipo, porque es un recurso compartido de todo el tenant.
 whatsappQrRouter.post('/start', blockSupervisors, async (req, res) => {
-  const { displayName } = req.body || {};
+  const { displayName, asNegocio } = req.body || {};
+
+  if (asNegocio && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Solo un admin puede conectar el número del negocio' });
+  }
 
   try {
+    const ownerUserId = asNegocio ? null : req.user.id;
+    const nombreDefault = asNegocio ? 'WhatsApp del negocio' : `WhatsApp de ${req.user.id}`;
+
     const result = await pool.query(
       `INSERT INTO channels (tenant_id, type, display_name, status, owner_user_id)
        VALUES ($1, 'whatsapp_qr', $2, 'pending', $3)
        RETURNING id`,
-      [req.user.tenantId, displayName || `WhatsApp de ${req.user.id}`, req.user.id]
+      [req.user.tenantId, displayName || nombreDefault, ownerUserId]
     );
     const channelId = result.rows[0].id;
 
-    await startSession(channelId, req.user.tenantId, req.user.id);
+    await startSession(channelId, req.user.tenantId, ownerUserId);
 
     res.status(201).json({ channelId });
   } catch (error) {
