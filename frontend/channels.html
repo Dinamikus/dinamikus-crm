@@ -61,6 +61,28 @@
         <div id="qrError" class="auth-error" style="margin-top:12px"></div>
       </div>
 
+      <div class="card" id="qrNegocioCard" style="display:none">
+        <h3>Conectar el número del negocio</h3>
+        <p class="muted">
+          Un número dedicado al negocio (no el celular personal de un asesor) — es el que
+          usa el bot automatizado para responder, agendar citas y hacer seguimiento.
+          Solo el admin puede conectarlo.
+        </p>
+        <div id="qrNegocioConnectedInfo" style="display:none;margin-bottom:12px">
+          <span class="badge connected">Conectado</span>
+          <span id="qrNegocioConnectedNumber" style="margin-left:8px;font-weight:700"></span>
+          <button id="qrNegocioDisconnectBtn" class="remove-btn" style="margin-left:14px">Desconectar</button>
+        </div>
+        <div id="qrNegocioStartArea">
+          <button id="qrNegocioStartBtn" class="primary">Generar código QR del negocio</button>
+        </div>
+        <div id="qrNegocioImageArea" style="display:none;margin-top:16px;text-align:center">
+          <img id="qrNegocioImage" alt="Código QR de WhatsApp del negocio" style="max-width:260px;border:1px solid #e5e9f0;border-radius:12px">
+          <p class="muted" style="margin-top:8px">Escanea con el celular que tenga el número del negocio (no tu número personal).</p>
+        </div>
+        <div id="qrNegocioError" class="auth-error" style="margin-top:12px"></div>
+      </div>
+
       <div class="card" id="signupCard">
         <h3>Conectar WhatsApp</h3>
         <p class="muted" id="signupDescription">Cargando…</p>

@@ -185,6 +185,122 @@ async function initQrSection() {
   });
 }
 
+// --- WhatsApp del negocio por QR (solo admin — el que usa el bot automatizado) ---
+let negocioQrChannelId = null;
+let negocioQrPollTimer = null;
+
+async function findNegocioQrChannel() {
+  try {
+    const r = await authFetch('/api/channels');
+    const channels = await r.json();
+    return channels.find((c) => c.type === 'whatsapp_qr' && !c.owner_user_id) || null;
+  } catch {
+    return null;
+  }
+}
+
+function showNegocioQrConnected(externalId) {
+  document.querySelector('#qrNegocioConnectedInfo').style.display = 'block';
+  document.querySelector('#qrNegocioConnectedNumber').textContent = externalId ? `+${externalId}` : '';
+  document.querySelector('#qrNegocioStartArea').style.display = 'none';
+  document.querySelector('#qrNegocioImageArea').style.display = 'none';
+  if (negocioQrPollTimer) clearInterval(negocioQrPollTimer);
+}
+
+function showNegocioQrPending() {
+  document.querySelector('#qrNegocioConnectedInfo').style.display = 'none';
+  document.querySelector('#qrNegocioStartArea').style.display = 'none';
+}
+
+function showNegocioQrStart() {
+  document.querySelector('#qrNegocioConnectedInfo').style.display = 'none';
+  document.querySelector('#qrNegocioStartArea').style.display = 'block';
+  document.querySelector('#qrNegocioImageArea').style.display = 'none';
+  if (negocioQrPollTimer) clearInterval(negocioQrPollTimer);
+}
+
+function pollNegocioQrStatus() {
+  if (negocioQrPollTimer) clearInterval(negocioQrPollTimer);
+  negocioQrPollTimer = setInterval(async () => {
+    if (!negocioQrChannelId) return;
+    try {
+      const r = await authFetch(`/api/channels/whatsapp-qr/${negocioQrChannelId}/status`);
+      if (!r.ok) {
+        clearInterval(negocioQrPollTimer);
+        return;
+      }
+      const data = await r.json();
+      if (data.status === 'connected') {
+        showNegocioQrConnected(data.externalId);
+      } else if (data.qrDataUrl) {
+        document.querySelector('#qrNegocioImage').src = data.qrDataUrl;
+        document.querySelector('#qrNegocioImageArea').style.display = 'block';
+        showNegocioQrPending();
+      }
+    } catch {
+      /* se reintenta en el próximo tick */
+    }
+  }, 2500);
+}
+
+async function initNegocioQrSection() {
+  if (!isAdmin) return; // la tarjeta ya está oculta, pero por seguridad no enganches nada
+
+  document.querySelector('#qrNegocioCard').style.display = 'block';
+
+  const startBtn = document.querySelector('#qrNegocioStartBtn');
+  const disconnectBtn = document.querySelector('#qrNegocioDisconnectBtn');
+  const errorBox = document.querySelector('#qrNegocioError');
+
+  const existing = await findNegocioQrChannel();
+  if (existing) {
+    negocioQrChannelId = existing.id;
+    if (existing.status === 'connected') {
+      showNegocioQrConnected(existing.external_id);
+    } else {
+      showNegocioQrPending();
+      document.querySelector('#qrNegocioImageArea').style.display = 'block';
+      pollNegocioQrStatus();
+    }
+  }
+
+  startBtn.addEventListener('click', async () => {
+    errorBox.classList.remove('visible');
+    startBtn.disabled = true;
+    startBtn.textContent = 'Generando…';
+    try {
+      const r = await authFetch('/api/channels/whatsapp-qr/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ displayName: 'WhatsApp del negocio', asNegocio: true })
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        errorBox.textContent = data.error || 'No se pudo iniciar la conexión.';
+        errorBox.classList.add('visible');
+        return;
+      }
+      negocioQrChannelId = data.channelId;
+      showNegocioQrPending();
+      pollNegocioQrStatus();
+    } catch {
+      errorBox.textContent = 'Error de conexión al generar el QR.';
+      errorBox.classList.add('visible');
+    } finally {
+      startBtn.disabled = false;
+      startBtn.textContent = 'Generar código QR del negocio';
+    }
+  });
+
+  disconnectBtn.addEventListener('click', async () => {
+    if (!negocioQrChannelId) return;
+    if (!confirm('¿Desconectar el WhatsApp del negocio? El bot dejará de responder.')) return;
+    await authFetch(`/api/channels/whatsapp-qr/${negocioQrChannelId}`, { method: 'DELETE' });
+    negocioQrChannelId = null;
+    showNegocioQrStart();
+  });
+}
+
 async function submitEmbeddedSignup() {
   if (!pendingSession || !pendingSession.code || !pendingSession.wabaId || !pendingSession.phoneNumberId) {
     return;
@@ -226,6 +342,8 @@ async function init() {
   } else {
     initQrSection();
   }
+
+  if (isAdmin) initNegocioQrSection();
 
   if (!isAdmin) {
     desc.textContent = 'Solo un administrador puede conectar o quitar canales.';

@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Bot de citas — Dinamikus CRM</title>
+  <link rel="stylesheet" href="/styles.css?v=20260916a">
+  <style>
+    /* Estilos propios de esta pantalla — si al final funcionan bien,
+       podemos moverlos a styles.css como hacen el resto de páginas. */
+    .bot-toggle-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+    .field-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+    .field{display:grid;gap:6px}
+    .field label{font-size:12px;font-weight:700;color:#344054}
+    .field input,.field select,.field textarea{padding:9px 11px;border:1px solid #d0d5dd;border-radius:8px;font-size:13px;font-family:inherit}
+    .horario-row{display:grid;grid-template-columns:120px 1fr auto 1fr;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid #edf0f5}
+    .horario-row:last-child{border-bottom:0}
+    .horario-row label{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#344054}
+    .horario-row input[type="time"]{padding:7px 9px;border:1px solid #d0d5dd;border-radius:8px;font-size:13px;font-family:inherit}
+    .horario-row .separador{text-align:center;color:#98a2b3;font-size:12px}
+    .list-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #edf0f5;gap:12px}
+    .list-row:last-child{border-bottom:0}
+    .list-row .meta strong{font-size:14px;display:block}
+    .list-row .meta span{font-size:12px;color:#667085}
+    .list-row .actions{display:flex;gap:14px;white-space:nowrap}
+    .list-row .actions button{border:0;background:none;cursor:pointer;font-size:12px;font-weight:700}
+    .edit-link{color:#2563eb}
+    .add-form{display:grid;grid-template-columns:2fr 1fr auto;gap:10px;margin-top:16px;padding-top:16px;border-top:1px dashed #d0d5dd}
+    .add-form input{padding:9px 11px;border:1px solid #d0d5dd;border-radius:8px;font-size:13px;font-family:inherit}
+    .add-form.faq-form{grid-template-columns:1fr auto}
+    .add-form.faq-form textarea{grid-column:1 / -1;padding:9px 11px;border:1px solid #d0d5dd;border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;min-height:60px}
+    .add-btn{border:0;background:#eff6ff;color:#2563eb;border-radius:8px;padding:0 16px;font-weight:700;cursor:pointer;font-size:13px}
+    .inline-toggle{display:flex;align-items:center;gap:8px;font-size:13px;color:#344054;padding:10px 0;border-bottom:1px solid #edf0f5}
+    .inline-toggle:last-child{border-bottom:0}
+    .inline-toggle input{width:16px;height:16px}
+    .inline-toggle .days-input{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12px;color:#667085}
+    .inline-toggle .days-input input{width:48px;padding:5px 6px;border:1px solid #d0d5dd;border-radius:6px;font-family:inherit;text-align:center}
+    .sede-editor{margin-top:16px;padding-top:16px;border-top:1px dashed #d0d5dd;display:none}
+    .sede-editor.visible{display:block}
+    .checkbox-row{display:flex;gap:18px;margin-top:10px}
+    .checkbox-row label{display:flex;align-items:center;gap:6px;font-size:13px;color:#344054}
+    .small-btn{border:0;background:none;color:#667085;font-size:12px;font-weight:700;cursor:pointer}
+    .toggle-switch{width:16px;height:16px;cursor:pointer}
+  </style>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><span>◆</span> Dinamikus CRM</div>
+    <nav>
+      <a href="/">Dashboard</a>
+      <a href="/inbox.html">Inbox</a>
+      <a href="/leads.html">Leads</a>
+      <a href="/pipeline.html">Pipeline</a>
+      <a href="/automations.html">Automatizaciones</a>
+      <a class="active" href="/bot-config.html">Bot de citas</a>
+      <a href="/channels.html">Canales</a>
+      <a href="/reports.html">Reportes</a>
+      <a href="/team.html">Equipo</a>
+    </nav>
+    <div class="tenant">
+      <small>EMPRESA</small>
+      <strong id="tenantName">—</strong>
+      <span>Plan Starter</span>
+      <a href="#" id="logoutLink">Cerrar sesión</a>
+    </div>
+  </aside>
+
+  <main>
+    <header>
+      <div>
+        <p class="eyebrow">CRM SAAS</p>
+        <h1>Bot de citas</h1>
+        <p class="muted">Responde, agenda y da seguimiento solo — necesita un WhatsApp del negocio conectado en Canales.</p>
+      </div>
+    </header>
+
+    <section class="grid" style="grid-template-columns: 1fr; gap:20px; max-width:760px">
+
+      <!-- Activar / desactivar -->
+      <div class="card">
+        <div class="bot-toggle-row">
+          <div>
+            <h3 style="margin-bottom:2px">Bot activado</h3>
+            <p class="muted" style="margin:0">Mientras esté apagado, los mensajes entrantes no reciben respuesta automática.</p>
+          </div>
+          <label class="auto-assign-toggle" style="padding:0">
+            <input type="checkbox" id="activoToggle" class="toggle-switch">
+          </label>
+        </div>
+        <p id="sinCanalAviso" class="muted" style="display:none;margin-top:10px;color:#b54708">
+          ⚠️ No tienes un WhatsApp del negocio conectado todavía. Ve a <a href="/channels.html">Canales</a> para conectarlo.
+        </p>
+      </div>
+
+      <!-- Información general -->
+      <div class="card">
+        <h3>Información general</h3>
+        <p class="muted">Estos datos los usa el bot para presentarse y para el mensaje de confirmación de cita.</p>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="nombreNegocio">Nombre del negocio</label>
+            <input type="text" id="nombreNegocio" placeholder="Ej: Clínica Integral Emmanuel">
+          </div>
+          <div class="field">
+            <label for="direccion">Dirección (opcional)</label>
+            <input type="text" id="direccion" placeholder="Se incluye en la confirmación de cita">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="timezone">Zona horaria</label>
+            <select id="timezone">
+              <option value="America/El_Salvador">El Salvador (GMT-6)</option>
+              <option value="America/Guatemala">Guatemala (GMT-6)</option>
+              <option value="America/Tegucigalpa">Honduras (GMT-6)</option>
+              <option value="America/Mexico_City">México Central (GMT-6)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="etapaPipeline">Al confirmarse una cita, mover el lead a…</label>
+            <select id="etapaPipeline">
+              <option value="">No mover de etapa</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Horario de atención general -->
+      <div class="card">
+        <h3>Horario general (citas virtuales)</h3>
+        <p class="muted">Se usa para citas virtuales y como respaldo si un servicio presencial no tiene ninguna sede asignada. Cada sede define su propio horario más abajo.</p>
+
+        <div id="horarioList"></div>
+      </div>
+
+      <!-- Sedes / ubicaciones -->
+      <div class="card">
+        <h3>Sedes</h3>
+        <p class="muted">Si el Dr. rota entre clínicas, cada sede tiene su propio horario — el bot solo pregunta la sede cuando hay más de una activa. Si no agregas ninguna, el bot usa el horario general de arriba.</p>
+
+        <div id="ubicacionesList"></div>
+
+        <div style="margin-top:16px">
+          <button id="agregarSedeBtn" class="add-btn">+ Agregar sede</button>
+        </div>
+
+        <div id="sedeEditor" class="sede-editor">
+          <input type="hidden" id="sedeEditorId" value="">
+          <div class="field-row" style="margin-top:0">
+            <div class="field">
+              <label for="sedeEditorNombre">Nombre de la sede</label>
+              <input type="text" id="sedeEditorNombre" placeholder="Ej: Sede San Salvador">
+            </div>
+            <div class="field">
+              <label for="sedeEditorDireccion">Dirección</label>
+              <input type="text" id="sedeEditorDireccion" placeholder="Col. Escalón, Av. Los Andes #123">
+            </div>
+          </div>
+          <div class="field" style="margin-top:14px">
+            <label for="sedeEditorNota">Nota (opcional)</label>
+            <input type="text" id="sedeEditorNota" placeholder="Ej: Solo con cita previa">
+          </div>
+          <p class="muted" style="margin-top:16px;margin-bottom:0;font-size:12px;font-weight:700">Horario de esta sede</p>
+          <div id="sedeEditorHorario"></div>
+          <div style="margin-top:14px;display:flex;gap:12px">
+            <button id="sedeEditorGuardarBtn" class="primary">Guardar sede</button>
+            <button id="sedeEditorCancelarBtn" class="small-btn">Cancelar</button>
+          </div>
+          <div id="sedeEditorError" class="auth-error" style="margin-top:10px"></div>
+        </div>
+      </div>
+
+      <!-- Servicios -->
+      <div class="card">
+        <h3>Servicios</h3>
+        <p class="muted">Lo que el bot ofrece agendar. La duración define cuánto dura cada espacio disponible.</p>
+
+        <div id="serviciosList"></div>
+
+        <div class="add-form">
+          <input type="text" id="nuevoServicioNombre" placeholder="Nombre del servicio">
+          <input type="number" id="nuevoServicioMinutos" placeholder="Minutos" value="30">
+          <button id="nuevoServicioBtn" class="add-btn">+ Agregar</button>
+        </div>
+        <div class="checkbox-row">
+          <label><input type="checkbox" id="nuevoServicioPresencial" checked> Presencial</label>
+          <label><input type="checkbox" id="nuevoServicioVirtual"> Virtual</label>
+        </div>
+        <p class="muted" style="margin-top:6px;font-size:12px">Si marcas ambas, el bot le pregunta al paciente cuál prefiere.</p>
+        <div id="servicioError" class="auth-error" style="margin-top:10px"></div>
+      </div>
+
+      <!-- FAQs -->
+      <div class="card">
+        <h3>Preguntas frecuentes</h3>
+        <p class="muted">El bot solo responde con lo que escribas aquí — si no encuentra coincidencia, escala a un asesor en vez de inventar.</p>
+
+        <div id="faqsList"></div>
+
+        <div class="add-form faq-form">
+          <input type="text" id="nuevaFaqPregunta" placeholder="Pregunta">
+          <button id="nuevaFaqBtn" class="add-btn">+ Agregar</button>
+          <textarea id="nuevaFaqRespuesta" placeholder="Respuesta"></textarea>
+        </div>
+        <div id="faqError" class="auth-error" style="margin-top:10px"></div>
+      </div>
+
+      <!-- Recordatorios y seguimiento -->
+      <div class="card">
+        <h3>Recordatorios y seguimiento</h3>
+        <p class="muted">Mensajes automáticos alrededor de una cita ya agendada.</p>
+
+        <label class="inline-toggle">
+          <input type="checkbox" id="recordatorio24hToggle">
+          Recordatorio 24 horas antes
+        </label>
+        <label class="inline-toggle">
+          <input type="checkbox" id="recordatorio2hToggle">
+          Recordatorio 2 horas antes
+        </label>
+        <label class="inline-toggle">
+          <input type="checkbox" id="recontactoToggle">
+          Recontactar si el paciente no llegó a la cita
+          <span class="days-input">
+            a los <input type="number" id="diasRecontactoInput" value="2" min="1" max="30"> días
+          </span>
+        </label>
+      </div>
+
+      <!-- Guardar -->
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:12px">
+          <button id="saveBotConfigBtn" class="primary">Guardar configuración</button>
+          <span id="saveStatus" class="muted" style="font-size:12px"></span>
+        </div>
+        <div id="botConfigError" class="auth-error" style="margin-top:12px"></div>
+        <p id="readOnlyNotice" class="muted" style="display:none;margin-top:10px">
+          Solo un administrador puede cambiar esta configuración.
+        </p>
+      </div>
+
+    </section>
+  </main>
+
+  <script src="/auth.js?v=20260916a"></script>
+  <script src="/bot-config.js?v=20260916a"></script>
+</body>
+</html>
