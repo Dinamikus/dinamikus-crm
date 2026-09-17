@@ -149,26 +149,43 @@ Reglas:
 }
 
 async function llamarClaude(contexto, mensajeTexto) {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': process.env.ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: ANTHROPIC_MODEL,
-      max_tokens: 1024,
-      system: [
-        {
-          type: 'text',
-          text: construirSystemPrompt(contexto),
-          cache_control: { type: 'ephemeral' }
-        }
-      ],
-      messages: [{ role: 'user', content: mensajeTexto }]
-    })
-  });
+  // Si la API tarda demasiado o la conexión se cuelga, es mejor que falle con
+  // un error claro (y quede en los logs) a que la llamada se quede esperando
+  // para siempre en silencio — fetch() no tiene timeout por defecto en Node.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+  let response;
+  try {
+    response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json'
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: ANTHROPIC_MODEL,
+        max_tokens: 1024,
+        system: [
+          {
+            type: 'text',
+            text: construirSystemPrompt(contexto),
+            cache_control: { type: 'ephemeral' }
+          }
+        ],
+        messages: [{ role: 'user', content: mensajeTexto }]
+      })
+    });
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error('La API de Claude tardó más de 20s en responder (timeout)');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     throw new Error(`Anthropic API respondió ${response.status}: ${await response.text()}`);
