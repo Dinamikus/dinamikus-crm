@@ -32,7 +32,10 @@ export async function procesarMensajeBotCitas({ tenantId, conversationId, leadId
     interp = await llamarClaude(contexto, mensajeTexto);
   } catch (error) {
     console.error('[bot] Error llamando a la API de Claude:', error.message);
-    return; // mejor no responder nada a que el paciente reciba un error crudo
+    // Aunque la interpretación falle, es mejor un mensaje genérico que dejar
+    // al paciente sin ninguna respuesta — así detectamos el problema (queda
+    // en los logs) sin que la conversación se sienta "muerta" del otro lado.
+    return enviarMensaje(tenantId, leadId, plantillas.noEntendido());
   }
 
   await manejarIntencion(interp, estado, config, tenantId, leadId, conversationId);
@@ -155,7 +158,7 @@ async function llamarClaude(contexto, mensajeTexto) {
     },
     body: JSON.stringify({
       model: ANTHROPIC_MODEL,
-      max_tokens: 300,
+      max_tokens: 1024,
       system: [
         {
           type: 'text',
@@ -208,7 +211,13 @@ async function manejarIntencion(interp, estado, config, tenantId, leadId, conver
     return escalarAHumano(conversationId, tenantId, leadId);
   }
 
-  if (interp.intencion === 'no_entendido' || interp.confianza === 'baja') {
+  // El reintento/escalado por "no entendí" solo aplica DENTRO de un flujo activo
+  // (cuando el bot ya preguntó algo específico). En 'inicio' un saludo genérico
+  // ("Hola", "buenas") es normal que la IA lo marque como no_entendido — ahí
+  // simplemente se le muestra el menú de bienvenida, no tiene sentido pedirle
+  // que "reformule" un saludo.
+  const enFlujoActivo = estado.paso_actual !== 'inicio';
+  if (enFlujoActivo && (interp.intencion === 'no_entendido' || interp.confianza === 'baja')) {
     const intentos = (estado.intentos_no_entendido || 0) + 1;
     if (intentos >= config.max_reintentos_no_entendido) {
       return escalarAHumano(conversationId, tenantId, leadId);
