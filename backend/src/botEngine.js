@@ -14,6 +14,7 @@ const MOTORES = {
 export async function procesarMensajeBot({ tenantId, conversationId, leadId, mensajeTexto }) {
   const config = await pool.query('SELECT tipo_bot, activo FROM bot_config WHERE tenant_id = $1', [tenantId]);
   const row = config.rows[0];
+  console.log(`[bot-router] tenant=${tenantId} bot_config encontrado=${!!row} activo=${row && row.activo} tipo_bot=${row && row.tipo_bot}`);
   if (!row || !row.activo) return;
 
   const motor = MOTORES[row.tipo_bot];

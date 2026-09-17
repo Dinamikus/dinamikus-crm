@@ -164,13 +164,19 @@ export async function ingestInboundMessage({
     // mismo criterio que la bienvenida: solo en canales del negocio, nunca en
     // el celular personal de un asesor. No hace nada si el negocio no tiene
     // el bot activado (lo revisa procesarMensajeBot internamente).
+    console.log(
+      `[bot] chequeo de gancho — conversationIdForWelcome=${conversationIdForWelcome}, channelOwnerUserId=${channelOwnerUserId}, dispara=${!!(conversationIdForWelcome && !channelOwnerUserId)}`
+    );
     if (conversationIdForWelcome && !channelOwnerUserId) {
+      console.log('[bot] llamando a procesarMensajeBot...');
       procesarMensajeBot({
         tenantId,
         conversationId: conversationIdForWelcome,
         leadId,
         mensajeTexto: body
-      }).catch((error) => console.error('[bot] Error procesando mensaje:', error.message));
+      })
+        .then(() => console.log('[bot] procesarMensajeBot terminó sin error'))
+        .catch((error) => console.error('[bot] Error procesando mensaje:', error.message, error.stack));
     }
 
     return { leadId, conversationId, isNewLead };
