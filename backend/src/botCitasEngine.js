@@ -10,12 +10,19 @@ const DIAS = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 's
 // el celular personal de un asesor — mismo criterio que ya usa el mensaje de
 // bienvenida). No hace nada si el negocio no tiene el bot activado.
 export async function procesarMensajeBotCitas({ tenantId, conversationId, leadId, mensajeTexto }) {
+  console.log(`[bot-citas] función invocada, mensajeTexto=${JSON.stringify(mensajeTexto)}`);
   if (!mensajeTexto) return;
 
   const config = await getBotConfig(tenantId);
-  if (!config || !config.activo) return;
+  console.log(`[bot-citas] getBotConfig resultado: ${JSON.stringify(config)}`);
+  if (!config || !config.activo) {
+    console.log('[bot-citas] saliendo temprano: config ausente o inactiva');
+    return;
+  }
+  console.log(`[bot-citas] procesando mensaje "${mensajeTexto}" para conversation=${conversationId}`);
 
   let estado = await getOrCreateConversationState({ conversationId, tenantId, leadId });
+  console.log(`[bot-citas] estado obtenido, paso_actual=${estado.paso_actual}, bot_pausado=${estado.bot_pausado}`);
 
   if (estado.bot_pausado) {
     if (estado.pausado_hasta && new Date() > new Date(estado.pausado_hasta)) {
@@ -29,7 +36,9 @@ export async function procesarMensajeBotCitas({ tenantId, conversationId, leadId
 
   let interp;
   try {
+    console.log('[bot-citas] llamando a Claude...');
     interp = await llamarClaude(contexto, mensajeTexto);
+    console.log('[bot-citas] Claude respondió:', JSON.stringify(interp));
   } catch (error) {
     console.error('[bot] Error llamando a la API de Claude:', error.message);
     // Aunque la interpretación falle, es mejor un mensaje genérico que dejar
@@ -211,10 +220,12 @@ function limpiarPosiblesBackticks(texto) {
 }
 
 async function enviarMensaje(tenantId, leadId, texto) {
+  console.log(`[bot-citas] enviando mensaje a lead=${leadId}: "${texto.slice(0, 60)}..."`);
   try {
     await sendOutboundToLead({ tenantId, leadId, body: texto });
+    console.log('[bot-citas] mensaje enviado OK');
   } catch (error) {
-    console.error('[bot] Error enviando mensaje:', error.message);
+    console.error('[bot] Error enviando mensaje:', error.message, error.stack);
   }
 }
 
