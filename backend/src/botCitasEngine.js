@@ -173,7 +173,21 @@ async function llamarClaude(contexto, mensajeTexto) {
 
   const data = await response.json();
   const raw = (data.content && data.content[0] && data.content[0].text) || '{}';
-  return JSON.parse(raw);
+  return JSON.parse(limpiarPosiblesBackticks(raw));
+}
+
+// Haiku a veces envuelve el JSON en un bloque de código markdown (```json ... ```)
+// a pesar de que el prompt le pide no hacerlo. Se lo quitamos antes de parsear,
+// en vez de confiar en que el modelo siempre obedezca al pie de la letra.
+function limpiarPosiblesBackticks(texto) {
+  const limpio = texto.trim();
+  if (limpio.startsWith('```')) {
+    return limpio
+      .replace(/^```[a-zA-Z]*\s*/, '')
+      .replace(/```\s*$/, '')
+      .trim();
+  }
+  return limpio;
 }
 
 async function enviarMensaje(tenantId, leadId, texto) {
