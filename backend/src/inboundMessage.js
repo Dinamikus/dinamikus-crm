@@ -70,6 +70,11 @@ export async function ingestInboundMessage({
            DO UPDATE SET
              name = COALESCE(leads.name, EXCLUDED.name),
              external_user_id = COALESCE(EXCLUDED.external_user_id, leads.external_user_id),
+             -- Si el canal por donde le escribió cambió de ID (ej. se desconectó y
+             -- se volvió a conectar el WhatsApp QR), resincroniza el lead al canal
+             -- actual — si no, se queda apuntando a un canal borrado para siempre
+             -- y ya no se le puede volver a escribir desde el CRM ni desde el bot.
+             channel_id = EXCLUDED.channel_id,
              updated_at = NOW()
            RETURNING id, (xmax = 0) AS is_new`,
           [tenantId, channelId, contactName, fromId, extId, channelType, defaultStage]
