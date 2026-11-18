@@ -104,6 +104,17 @@ export async function ingestInboundMessage({
       } else {
         await autoAssignLead(client, tenantId, leadId);
       }
+    } else if (channelOwnerUserId) {
+      // El lead YA existía (de otro canal, importado, etc.) pero ahora le está
+      // escribiendo al WhatsApp PERSONAL de un asesor — esa conversación está
+      // pasando literalmente por su celular, así que debe quedarle visible a él,
+      // sin importar a quién estuviera asignado antes. Sin esto, el mensaje
+      // llegaba pero el lead se quedaba "Sin asignar" (o con el asesor viejo) y
+      // el dueño real de esa conversación nunca la veía en su Inbox.
+      await client.query(
+        'UPDATE leads SET assigned_user_id = $1 WHERE id = $2 AND assigned_user_id IS DISTINCT FROM $1',
+        [channelOwnerUserId, leadId]
+      );
     }
 
     // Reutiliza la conversación abierta más reciente para ese lead+canal, o crea una nueva.
