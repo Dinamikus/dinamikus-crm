@@ -12,7 +12,8 @@ import { uploadMedia, mediaConfigured, extensionForMime } from './mediaStorage.j
 // se llama al arrancar el servidor, para reconectar solas las sesiones que ya
 // habían escaneado el QR antes de un redeploy.
 const sessions = new Map();
-const logger = pino({ level: 'silent' });
+// Temporal (diagnóstico): nivel 'warn' para ver por qué falla el descifrado de mensajes.
+const logger = pino({ level: 'warn' });
 
 export function getSession(channelId) {
   return sessions.get(channelId) || null;
@@ -94,6 +95,12 @@ export async function startSession(channelId, tenantId, ownerUserId) {
         `[whatsapp_qr ${channelId}] mensaje de ${remoteJid} fromMe=${msg.key.fromMe} tieneMensaje=${!!msg.message}`
       );
 
+      if (!msg.message && remoteJid !== 'status@broadcast') {
+        // Diagnóstico: mensaje sin contenido = WhatsApp no pudo descifrarlo.
+        console.log(
+          `[whatsapp_qr ${channelId}] SIN CONTENIDO stubType=${msg.messageStubType} stubParams=${JSON.stringify(msg.messageStubParameters)} senderPn=${msg.key.senderPn || msg.key.participantPn || 'no'} addressingMode=${msg.key.addressingMode || 'n/a'}`
+        );
+      }
       if (!msg.message || remoteJid === 'status@broadcast') continue;
 
       const isLid = remoteJid.endsWith('@lid');
