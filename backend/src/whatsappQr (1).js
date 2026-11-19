@@ -1,0 +1,292 @@
+import makeWASocket, { DisconnectReason, makeCacheableSignalKeyStore, downloadMediaMessage } from 'baileys';
+import { Boom } from '@hapi/boom';
+import QRCode from 'qrcode';
+import pino from 'pino';
+import { pool } from './db.js';
+import { usePostgresAuthState, deletePostgresAuthState } from './whatsappQrAuthState.js';
+import { ingestInboundMessage, ingestOutboundMessageFromDevice } from './inboundMessage.js';
+import { uploadMedia, mediaConfigured, extensionForMime } from './mediaStorage.js';
+
+// Sesiones activas en memoria: channelId -> { sock, qrDataUrl, status }.
+// Vive mientras el proceso de Node esté corriendo — por eso reconnectAllOnBoot()
+// se llama al arrancar el servidor, para reconectar solas las sesiones que ya
+// habían escaneado el QR antes de un redeploy.
+const sessions = new Map();
+// Temporal (diagnóstico): nivel 'warn' para ver por qué falla el descifrado de mensajes.
+const logger = pino({ level: 'warn' });
+
+export function getSession(channelId) {
+  return sessions.get(channelId) || null;
+}
+
+export async function startSession(channelId, tenantId, ownerUserId) {
+  // Si ya hay una sesión viva para este canal, no crear otra.
+  const current = sessions.get(channelId);
+  if (current && current.sock) return current;
+
+  const { state, saveCreds } = await usePostgresAuthState(channelId);
+
+  const sock = makeWASocket({
+    auth: {
+      creds: state.creds,
+      keys: makeCacheableSignalKeyStore(state.keys, logger)
+    },
+    logger,
+    printQRInTerminal: false,
+    browser: ['Dinamikus CRM', 'Chrome', '1.0']
+  });
+
+  const entry = { sock, qrDataUrl: null, status: 'pending' };
+  sessions.set(channelId, entry);
+
+  sock.ev.on('creds.update', saveCreds);
+
+  sock.ev.on('connection.update', async (update) => {
+    const { connection, lastDisconnect, qr } = update;
+
+    if (qr) {
+      entry.qrDataUrl = await QRCode.toDataURL(qr);
+      entry.status = 'pending';
+      await pool.query('UPDATE channels SET status = $1 WHERE id = $2', ['pending', channelId]);
+    }
+
+    if (connection === 'open') {
+      entry.status = 'connected';
+      entry.qrDataUrl = null;
+      const jid = sock.user && sock.user.id;
+      const phone = jid ? jid.split(':')[0].split('@')[0] : null;
+      console.log(`[whatsapp_qr ${channelId}] conectado correctamente, numero: ${phone}`);
+      await pool.query(
+        `UPDATE channels SET status = 'connected', external_id = COALESCE($1, external_id) WHERE id = $2`,
+        [phone, channelId]
+      );
+    }
+
+    if (connection === 'close') {
+      const statusCode = lastDisconnect && lastDisconnect.error instanceof Boom
+        ? lastDisconnect.error.output.statusCode
+        : null;
+      const loggedOut = statusCode === DisconnectReason.loggedOut;
+
+      sessions.delete(channelId);
+
+      if (loggedOut) {
+        await pool.query("UPDATE channels SET status = 'disconnected' WHERE id = $1", [channelId]);
+        await deletePostgresAuthState(channelId);
+      } else {
+        // Corte de red/reinicio, no un cierre de sesión real — reintenta solo.
+        await pool.query("UPDATE channels SET status = 'pending' WHERE id = $1", [channelId]);
+        setTimeout(() => {
+          startSession(channelId, tenantId, ownerUserId).catch((err) =>
+            console.error('Error reconectando canal WhatsApp QR:', channelId, err.message)
+          );
+        }, 3000);
+      }
+    }
+  });
+
+  sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    console.log(`[whatsapp_qr ${channelId}] messages.upsert type=${type} count=${messages.length}`);
+    if (type !== 'notify') return;
+
+    for (const msg of messages) {
+      const remoteJid = msg.key.remoteJid || '';
+      console.log(
+        `[whatsapp_qr ${channelId}] mensaje de ${remoteJid} fromMe=${msg.key.fromMe} tieneMensaje=${!!msg.message}`
+      );
+
+      if (!msg.message && remoteJid !== 'status@broadcast') {
+        // Diagnóstico: mensaje sin contenido = WhatsApp no pudo descifrarlo.
+        console.log(
+          `[whatsapp_qr ${channelId}] SIN CONTENIDO stubType=${msg.messageStubType} stubParams=${JSON.stringify(msg.messageStubParameters)} senderPn=${msg.key.remoteJidAlt || msg.key.senderPn || msg.key.participantPn || 'no'} addressingMode=${msg.key.addressingMode || 'n/a'}`
+        );
+      }
+      if (!msg.message || remoteJid === 'status@broadcast') continue;
+
+      const isLid = remoteJid.endsWith('@lid');
+      const isPhoneJid = remoteJid.endsWith('@s.whatsapp.net');
+      if (!isLid && !isPhoneJid) {
+        console.log(`[whatsapp_qr ${channelId}] jid ignorado (no es chat 1:1): ${remoteJid}`);
+        continue;
+      }
+
+      // Cuando WhatsApp manda el contacto como @lid (identificador de privacidad),
+      // Baileys a veces trae el número de teléfono real en senderPn — lo usamos para
+      // no perder el dato que más le importa al negocio: el teléfono real del contacto.
+      // Guardamos AMBOS identificadores (LID y teléfono, cuando los tengamos) porque
+      // no todos los mensajes de la misma conversación traen el teléfono — sin esto,
+      // un mensaje sin senderPn no encontraba el lead ya creado y se perdía del hilo.
+      const rawLid = isLid ? remoteJid.split('@')[0] : null;
+      let resolvedPhone = isPhoneJid ? remoteJid.split('@')[0] : null;
+      if (isLid) {
+        // Baileys 7 entrega el teléfono real en remoteJidAlt (antes: senderPn).
+        // Si no viene, se intenta resolver con el mapa interno LID -> teléfono.
+        let senderPn = msg.key.remoteJidAlt || msg.key.senderPn || msg.key.participantAlt || msg.key.participantPn;
+        if (!senderPn) {
+          try {
+            const mapped = await sock.signalRepository.lidMapping.getPNForLID(remoteJid);
+            if (mapped) senderPn = mapped;
+          } catch {
+            /* sin mapeo disponible todavía */
+          }
+        }
+        if (senderPn) {
+          resolvedPhone = senderPn.split('@')[0].split(':')[0];
+          console.log(`[whatsapp_qr ${channelId}] @lid resuelto a telefono real via senderPn: ${resolvedPhone}`);
+        } else {
+          console.log(`[whatsapp_qr ${channelId}] @lid sin senderPn disponible, se guarda solo como identificador: ${rawLid}`);
+        }
+      }
+
+      const body = extractText(msg.message);
+      const media = getMediaDetails(msg.message);
+      console.log(
+        `[whatsapp_qr ${channelId}] texto extraido: ${JSON.stringify(body)}${media ? ` | multimedia: ${media.messageType}` : ''}`
+      );
+      if (!body) continue; // adjuntos sin texto: se omiten en esta primera versión
+
+      let mediaKey = null;
+      let mediaMimeType = null;
+      if (media && mediaConfigured()) {
+        try {
+          const buffer = await downloadMediaMessage(msg, 'buffer', {}, { logger, reuploadRequest: sock.updateMediaMessage });
+          mediaKey = await uploadMedia({
+            tenantId,
+            channelId,
+            messageExternalId: msg.key.id,
+            buffer,
+            mimeType: media.mimetype,
+            extension: media.extension
+          });
+          mediaMimeType = media.mimetype;
+          console.log(`[whatsapp_qr ${channelId}] archivo multimedia subido: ${mediaKey}`);
+        } catch (err) {
+          console.error(`[whatsapp_qr ${channelId}] error descargando/subiendo multimedia:`, err.message);
+        }
+      }
+
+      const channelRow = await pool.query('SELECT external_id FROM channels WHERE id = $1', [
+        channelId
+      ]);
+      const channelExternalId = channelRow.rows[0] && channelRow.rows[0].external_id;
+
+      if (msg.key.fromMe) {
+        // El asesor respondió desde su propio celular, fuera del CRM. Busca el lead
+        // por cualquiera de los identificadores que tengamos para este mensaje.
+        const outResult = await ingestOutboundMessageFromDevice({
+          tenantId,
+          channelId,
+          candidateIds: [resolvedPhone, rawLid],
+          externalMessageId: msg.key.id,
+          messageType: media ? media.messageType : 'text',
+          body,
+          mediaKey,
+          mediaMimeType,
+          rawPayload: msg
+        });
+        console.log(`[whatsapp_qr ${channelId}] ingestOutboundMessageFromDevice resultado:`, outResult);
+      } else {
+        const result = await ingestInboundMessage({
+          tenantId,
+          channelId,
+          channelType: 'whatsapp_qr',
+          channelExternalId,
+          channelAccessTokenEncrypted: null,
+          channelOwnerUserId: ownerUserId,
+          identifyBy: resolvedPhone ? 'phone' : 'external_user_id',
+          fromId: resolvedPhone || rawLid,
+          secondaryExternalId: resolvedPhone ? rawLid : undefined,
+          contactName: msg.pushName || null,
+          externalMessageId: msg.key.id,
+          messageType: media ? media.messageType : 'text',
+          body,
+          mediaKey,
+          mediaMimeType,
+          rawPayload: msg
+        });
+        console.log(`[whatsapp_qr ${channelId}] ingestInboundMessage resultado:`, result);
+      }
+    }
+  });
+
+  return entry;
+}
+
+export async function stopSession(channelId, { logout }) {
+  const entry = sessions.get(channelId);
+  if (entry && entry.sock) {
+    try {
+      if (logout) await entry.sock.logout();
+      else entry.sock.end(undefined);
+    } catch {
+      /* la conexión puede ya estar cerrada */
+    }
+  }
+  sessions.delete(channelId);
+  if (logout) await deletePostgresAuthState(channelId);
+}
+
+export async function sendQrMessage(channelId, toId, text, jidType = 'phone') {
+  const entry = sessions.get(channelId);
+  if (!entry || !entry.sock || entry.status !== 'connected') {
+    throw new Error('Este canal de WhatsApp (QR) no está conectado en este momento');
+  }
+  const suffix = jidType === 'lid' ? '@lid' : '@s.whatsapp.net';
+  const jid = `${toId}${suffix}`;
+  const result = await entry.sock.sendMessage(jid, { text });
+  return result;
+}
+
+// Se llama una vez al arrancar el servidor: reconecta solas las sesiones que ya
+// habían sido escaneadas antes del último redeploy, usando las credenciales
+// guardadas en Postgres — el asesor no tiene que volver a escanear nada.
+export async function reconnectAllOnBoot() {
+  const result = await pool.query(
+    `SELECT id, tenant_id, owner_user_id FROM channels
+     WHERE type = 'whatsapp_qr' AND status IN ('connected', 'pending')`
+  );
+  for (const row of result.rows) {
+    startSession(row.id, row.tenant_id, row.owner_user_id).catch((err) =>
+      console.error('Error reconectando canal WhatsApp QR al arrancar:', row.id, err.message)
+    );
+  }
+}
+
+function extractText(message) {
+  const text =
+    message.conversation ||
+    (message.extendedTextMessage && message.extendedTextMessage.text) ||
+    (message.imageMessage && message.imageMessage.caption) ||
+    (message.videoMessage && message.videoMessage.caption) ||
+    null;
+  if (text) return text;
+
+  // Sin texto/caption: al menos deja una etiqueta en el hilo en vez de perder
+  // el mensaje por completo — mismo criterio que ya usa WhatsApp Cloud API.
+  if (message.imageMessage) return '[imagen]';
+  if (message.videoMessage) return '[video]';
+  if (message.audioMessage) return message.audioMessage.ptt ? '[audio de voz]' : '[audio]';
+  if (message.documentMessage) return '[documento]';
+  if (message.stickerMessage) return '[sticker]';
+  if (message.locationMessage) return '[ubicación]';
+  if (message.contactMessage) return '[contacto compartido]';
+  return null;
+}
+
+// Detecta si el mensaje trae un archivo real (no solo texto) y qué se necesita
+// para descargarlo y guardarlo: el tipo (para mostrarlo bien en el inbox) y el mimetype.
+function getMediaDetails(message) {
+  const candidates = [
+    { obj: message.imageMessage, messageType: 'image' },
+    { obj: message.videoMessage, messageType: 'video' },
+    { obj: message.audioMessage, messageType: message.audioMessage && message.audioMessage.ptt ? 'ptt' : 'audio' },
+    { obj: message.documentMessage, messageType: 'document' },
+    { obj: message.stickerMessage, messageType: 'sticker' }
+  ];
+
+  const match = candidates.find((c) => c.obj);
+  if (!match) return null;
+
+  const mimetype = match.obj.mimetype || 'application/octet-stream';
+  return { messageType: match.messageType, mimetype, extension: extensionForMime(mimetype, match.obj.fileName) };
+}
