@@ -98,7 +98,7 @@ export async function startSession(channelId, tenantId, ownerUserId) {
       if (!msg.message && remoteJid !== 'status@broadcast') {
         // Diagnóstico: mensaje sin contenido = WhatsApp no pudo descifrarlo.
         console.log(
-          `[whatsapp_qr ${channelId}] SIN CONTENIDO stubType=${msg.messageStubType} stubParams=${JSON.stringify(msg.messageStubParameters)} senderPn=${msg.key.senderPn || msg.key.participantPn || 'no'} addressingMode=${msg.key.addressingMode || 'n/a'}`
+          `[whatsapp_qr ${channelId}] SIN CONTENIDO stubType=${msg.messageStubType} stubParams=${JSON.stringify(msg.messageStubParameters)} senderPn=${msg.key.remoteJidAlt || msg.key.senderPn || msg.key.participantPn || 'no'} addressingMode=${msg.key.addressingMode || 'n/a'}`
         );
       }
       if (!msg.message || remoteJid === 'status@broadcast') continue;
@@ -119,9 +119,19 @@ export async function startSession(channelId, tenantId, ownerUserId) {
       const rawLid = isLid ? remoteJid.split('@')[0] : null;
       let resolvedPhone = isPhoneJid ? remoteJid.split('@')[0] : null;
       if (isLid) {
-        const senderPn = msg.key.senderPn || msg.key.participantPn;
+        // Baileys 7 entrega el teléfono real en remoteJidAlt (antes: senderPn).
+        // Si no viene, se intenta resolver con el mapa interno LID -> teléfono.
+        let senderPn = msg.key.remoteJidAlt || msg.key.senderPn || msg.key.participantAlt || msg.key.participantPn;
+        if (!senderPn) {
+          try {
+            const mapped = await sock.signalRepository.lidMapping.getPNForLID(remoteJid);
+            if (mapped) senderPn = mapped;
+          } catch {
+            /* sin mapeo disponible todavía */
+          }
+        }
         if (senderPn) {
-          resolvedPhone = senderPn.split('@')[0];
+          resolvedPhone = senderPn.split('@')[0].split(':')[0];
           console.log(`[whatsapp_qr ${channelId}] @lid resuelto a telefono real via senderPn: ${resolvedPhone}`);
         } else {
           console.log(`[whatsapp_qr ${channelId}] @lid sin senderPn disponible, se guarda solo como identificador: ${rawLid}`);
